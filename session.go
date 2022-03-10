@@ -1,8 +1,7 @@
 package cosweb
 
 import (
-	"github.com/hwcer/cosgo/session"
-	"github.com/hwcer/cosgo/session/options"
+	"github.com/hwcer/cosweb/session"
 	"net/http"
 	"time"
 )
@@ -32,7 +31,7 @@ type Session struct {
 func (this *Session) Start(level SessionStartType, sid ...string) (err error) {
 	storage := session.Get()
 	if storage == nil {
-		return options.ErrorStorageNotSet
+		return session.ErrorStorageNotSet
 	}
 	if level == SessionStartTypeNone {
 		return nil
@@ -43,9 +42,9 @@ func (this *Session) Start(level SessionStartType, sid ...string) (err error) {
 		this.sid = this.c.Cookie.Get(session.Options.Name)
 	}
 	if this.sid == "" {
-		return options.ErrorSessionIdEmpty
+		return session.ErrorSessionIdEmpty
 	}
-	if this.key, err = options.Decode(this.sid); err != nil {
+	if this.key, err = session.Decode(this.sid); err != nil {
 		return err
 	}
 
@@ -58,7 +57,7 @@ func (this *Session) Start(level SessionStartType, sid ...string) (err error) {
 	if this.uuid, data, err = storage.Get(this.key, lock); err != nil {
 		return err
 	} else if data == nil {
-		return options.ErrorSessionNotExist
+		return session.ErrorSessionNotExist
 	}
 	this.cache = data
 	this.locked = lock
@@ -107,7 +106,7 @@ func (this *Session) GetString(key string) (v string) {
 func (this *Session) Create(uuid string, data map[string]interface{}) (sid string, err error) {
 	storage := session.Get()
 	if storage == nil {
-		return "", options.ErrorStorageNotSet
+		return "", session.ErrorStorageNotSet
 	}
 	values := make(map[string]interface{}, len(data))
 	for k, v := range data {

@@ -5,6 +5,7 @@ go 1.17
 replace github.com/hwcer/cosweb v0.0.0 => ./
 
 require (
+	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/hwcer/cosgo v0.0.0-20220310063715-e2e620181bf8
 	golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871
 )
