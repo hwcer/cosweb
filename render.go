@@ -1,7 +1,7 @@
 package cosweb
 
 import (
-	"github.com/hwcer/cosgo/cosweb/render"
+	"github.com/hwcer/cosweb/render"
 	"io"
 )
 

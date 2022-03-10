@@ -6,7 +6,7 @@ replace github.com/hwcer/cosweb v0.0.0 => ./
 
 require (
 	github.com/hwcer/cosgo v0.0.0-20220310063715-e2e620181bf8
-	golang.org/x/crypto v0.0.0-20220307211146-efcb8507fb70
+	golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871
 )
 
 require (

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/hwcer/cosgo/cosweb"
+	"github.com/hwcer/cosweb"
 )
 
 func main() {
@@ -12,6 +12,6 @@ func main() {
 	}
 }
 
-func ping(context *cosweb.Context, f func()) error {
+func ping(context *cosweb.Context, next cosweb.Next) error {
 	return context.String("ok")
 }
