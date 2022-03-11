@@ -24,11 +24,14 @@ func Error(code int, err interface{}, args ...interface{}) (r *Message) {
 		code = DefaultErrorCode
 	}
 	r = &Message{Code: code}
-	data := fmt.Sprintf("%v", err)
-	if len(args) > 0 {
-		data = fmt.Sprintf(data, args...)
+	msg, ok := err.(string)
+	if !ok {
+		msg = fmt.Sprintf("%v", err)
 	}
-	r.Data = data
+	if len(args) > 0 {
+		msg = fmt.Sprintf(msg, args...)
+	}
+	r.Data = msg
 	return
 }
 

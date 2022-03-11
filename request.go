@@ -1,7 +1,6 @@
 package cosweb
 
 import (
-	"fmt"
 	"github.com/hwcer/cosgo/library/logger"
 	"net/url"
 )
@@ -12,7 +11,7 @@ type RequestDataTypeMap []RequestDataType
 const (
 	RequestDataTypeParam  RequestDataType = iota //params
 	RequestDataTypeForm                          //POST FORM
-	RequestDataTypeBody                          //body json and xml....
+	RequestDataTypeBody                          //bodyCache json and xml....
 	RequestDataTypeQuery                         //GET
 	RequestDataTypeCookie                        //COOKIES
 	RequestDataTypeHeader                        //HEADER
@@ -41,7 +40,7 @@ func (r *RequestDataTypeMap) Reset(keys ...RequestDataType) {
 //默认获取数据的顺序
 var defaultRequestDataType = RequestDataTypeMap{RequestDataTypeParam, RequestDataTypeQuery, RequestDataTypeBody, RequestDataTypeCookie}
 
-func getDataFromRequest(c *Context, key string, dataType RequestDataType) (string, bool) {
+func getDataFromRequest(c *Context, key string, dataType RequestDataType) (interface{}, bool) {
 	switch dataType {
 	case RequestDataTypeParam:
 		v, ok := c.params[key]
@@ -49,7 +48,7 @@ func getDataFromRequest(c *Context, key string, dataType RequestDataType) (strin
 	case RequestDataTypeQuery:
 		return getQueryValue(c, key)
 	case RequestDataTypeBody:
-		return getBodyValue(c, key)
+		return c.Body.Get(key)
 	case RequestDataTypeForm:
 		if v := c.Request.FormValue(key); v != "" {
 			return v, true
@@ -64,24 +63,6 @@ func getDataFromRequest(c *Context, key string, dataType RequestDataType) (strin
 		}
 	}
 	return "", false
-}
-
-func getBodyValue(c *Context, key string) (v string, ok bool) {
-	body, err := c.Body()
-	if  err != nil {
-		return
-	}
-	var d interface{}
-	if d, ok = body[key]; !ok {
-		return
-	}
-	switch d.(type) {
-	case string:
-		v = d.(string)
-	default:
-		v = fmt.Sprintf("%v", d)
-	}
-	return
 }
 
 func getQueryValue(c *Context, key string) (v string, ok bool) {

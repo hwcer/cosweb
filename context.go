@@ -1,6 +1,7 @@
 package cosweb
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,11 +23,11 @@ type CCPool struct {
 //Context API上下文.
 type Context struct {
 	pool     *CCPool //缓存逻辑层对象
-	body     map[string]interface{}
 	query    url.Values
 	params   map[string]string
 	engine   *Server
 	aborted  int
+	Body     *Body
 	Cookie   *Cookie
 	Session  *Session
 	Request  *http.Request
@@ -38,6 +39,7 @@ func NewContext(s *Server) *Context {
 	c := &Context{
 		engine: s,
 	}
+	c.Body = NewBody(c)
 	c.Cookie = NewCookie(c)
 	c.Session = NewSession(c)
 	return c
@@ -46,17 +48,17 @@ func NewContext(s *Server) *Context {
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Request = r
 	c.Response = w
-	//重新设置session id
 }
 
 //释放资源,准备进入缓存池
 func (c *Context) release() {
-	c.body = nil
 	c.query = nil
 	c.params = nil
 	c.aborted = 0
 	c.Request = nil
 	c.Response = nil
+
+	c.Body.release()
 	c.Cookie.release()
 	c.Session.release()
 }
@@ -157,7 +159,7 @@ func (c *Context) RemoteAddr() string {
 
 //Get 获取参数,优先路径中的params
 //其他方式直接使用c.Request...
-func (c *Context) Get(key string, dts ...RequestDataType) string {
+func (c *Context) Get(key string, dts ...RequestDataType) interface{} {
 	if len(dts) == 0 {
 		dts = c.engine.RequestDataType
 	}
@@ -168,27 +170,75 @@ func (c *Context) Get(key string, dts ...RequestDataType) string {
 	}
 	return ""
 }
-func (c *Context) GetInt(key string, dts ...RequestDataType) int32 {
+func (c *Context) GetInt(key string, dts ...RequestDataType) (r int64) {
 	v := c.Get(key, dts...)
-	if v == "" {
+	if v == nil {
 		return 0
 	}
-	r, _ := strconv.ParseInt(v, 10, 32)
-	return int32(r)
+	switch v.(type) {
+	case int:
+		r = int64(v.(int))
+	case int32:
+		r = int64(v.(int32))
+	case int64:
+		r = v.(int64)
+	case float32:
+		r = int64(v.(float32))
+	case float64:
+		r = int64(v.(float64))
+	case string:
+		r, _ = strconv.ParseInt(v.(string), 10, 64)
+	}
+	return
+}
+func (c *Context) GetFloat(key string, dts ...RequestDataType) (r float64) {
+	v := c.Get(key, dts...)
+	if v == nil {
+		return 0
+	}
+	switch v.(type) {
+	case int:
+		r = float64(v.(int))
+	case int32:
+		r = float64(v.(int32))
+	case int64:
+		r = float64(v.(int64))
+	case float32:
+		r = float64(v.(float32))
+	case float64:
+		r = v.(float64)
+	case string:
+		r, _ = strconv.ParseFloat(v.(string), 10)
+	}
+	return
+}
+
+func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
+	v := c.Get(key, dts...)
+	if v == nil {
+		return ""
+	}
+	switch v.(type) {
+	case string:
+		r = v.(string)
+	default:
+		r = fmt.Sprintf("%v", v)
+	}
+	return
 }
 
 //Body 将结果快速绑定到Body对象并返回Body
 //只绑定BODY(json,xml)内容其他参数通过Get获取
-func (c *Context) Body() (body map[string]interface{}, err error) {
-	if c.body != nil {
-		return c.body, nil
-	}
-	body = make(map[string]interface{})
-	if err = c.Bind(&body); err == nil {
-		c.body = body
-	}
-	return
-}
+//func (c *Context) Body() (body map[string]interface{}, err error) {
+//	if c.bodyCache != nil {
+//		return c.bodyCache, nil
+//	}
+//	body = make(map[string]interface{})
+//	if err = c.Bind(&body); err == nil {
+//		c.bodyCache = body
+//	}
+//	return
+//}
 
 //Bind 绑定JSON XML
 func (c *Context) Bind(i interface{}) error {

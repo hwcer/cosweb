@@ -17,16 +17,15 @@ type (
 
 // Bind implements the `Packer#Bind` function.
 func (b *DefaultBinder) Bind(c *Context, i interface{}) (err error) {
-	req := c.Request
-	if req.ContentLength == 0 {
+	if c.Body.Len() == 0 {
 		return
 	}
-	ctype := strings.ToLower(req.Header.Get(HeaderContentType))
+	ctype := strings.ToLower(c.Request.Header.Get(HeaderContentType))
 	switch {
 	case strings.HasPrefix(ctype, ContentTypeApplicationJSON):
-		return json.NewDecoder(req.Body).Decode(i)
+		return json.NewDecoder(c.Body).Decode(i)
 	case strings.HasPrefix(ctype, ContentTypeApplicationXML), strings.HasPrefix(ctype, ContentTypeTextXML):
-		return xml.NewDecoder(req.Body).Decode(i)
+		return xml.NewDecoder(c.Body).Decode(i)
 	default:
 		return ErrUnsupportedMediaType
 	}
