@@ -28,7 +28,7 @@ func (this *Static) Route(s *Server, prefix string, method ...string) {
 }
 
 func (this *Static) handle(c *Context, next Next) (err error) {
-	name := c.Get(iStaticRoutePath, RequestDataTypeParam)
+	name := c.GetString(iStaticRoutePath, RequestDataTypeParam)
 	file := filepath.Join(this.root, name)
 	//fmt.Printf("static file:%v\n", file)
 	http.ServeFile(c.Response, c.Request, file)
