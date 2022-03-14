@@ -170,27 +170,33 @@ func (c *Context) Get(key string, dts ...RequestDataType) interface{} {
 	}
 	return ""
 }
-func (c *Context) GetInt(key string, dts ...RequestDataType) (r int64) {
+func (c *Context) GetInt(key string, dts ...RequestDataType) (r int) {
 	v := c.Get(key, dts...)
 	if v == nil {
 		return 0
 	}
 	switch v.(type) {
 	case int:
-		r = int64(v.(int))
+		r = v.(int)
 	case int32:
-		r = int64(v.(int32))
+		r = int(v.(int32))
 	case int64:
-		r = v.(int64)
+		r = int(v.(int64))
 	case float32:
-		r = int64(v.(float32))
+		r = int(v.(float32))
 	case float64:
-		r = int64(v.(float64))
+		r = int(v.(float64))
 	case string:
-		r, _ = strconv.ParseInt(v.(string), 10, 64)
+		x, _ := strconv.ParseInt(v.(string), 10, 64)
+		r = int(x)
 	}
 	return
 }
+
+func (c *Context) GetInt32(key string, dts ...RequestDataType) (r int32) {
+	return int32(c.GetInt(key, dts...))
+}
+
 func (c *Context) GetFloat(key string, dts ...RequestDataType) (r float64) {
 	v := c.Get(key, dts...)
 	if v == nil {
@@ -226,19 +232,6 @@ func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
 	}
 	return
 }
-
-//Body 将结果快速绑定到Body对象并返回Body
-//只绑定BODY(json,xml)内容其他参数通过Get获取
-//func (c *Context) Body() (body map[string]interface{}, err error) {
-//	if c.bodyCache != nil {
-//		return c.bodyCache, nil
-//	}
-//	body = make(map[string]interface{})
-//	if err = c.Bind(&body); err == nil {
-//		c.bodyCache = body
-//	}
-//	return
-//}
 
 //Bind 绑定JSON XML
 func (c *Context) Bind(i interface{}) error {
