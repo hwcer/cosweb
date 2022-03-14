@@ -57,7 +57,6 @@ func (c *Context) release() {
 	c.aborted = 0
 	c.Request = nil
 	c.Response = nil
-
 	c.Body.release()
 	c.Cookie.release()
 	c.Session.release()

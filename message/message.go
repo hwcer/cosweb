@@ -35,7 +35,7 @@ func Error(code int, err interface{}, args ...interface{}) (r *Message) {
 	return
 }
 
-func Serialize(v interface{}) (r *Message) {
+func Parse(v interface{}) (r *Message) {
 	var ok bool
 	if r, ok = v.(*Message); ok {
 		return r
