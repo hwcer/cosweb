@@ -24,17 +24,20 @@ func (b *Body) release() {
 	b.buffer = nil
 }
 
-func (b *Body) Len() int {
-	return b.buffer.Len()
+func (b *Body) Len() (r int) {
+	buf := b.Buffer()
+	if b.Error == nil {
+		 r=buf.Len()
+	}
+	return
 }
 
 func (b *Body) Get(key string) (val interface{}, ok bool) {
 	if b.params == nil {
-		params := make(map[string]interface{}, 0)
-		if err := b.c.Bind(&params); err != nil {
+		b.params = make(map[string]interface{}, 0)
+		if err := b.c.Bind(&b.params); err != nil {
 			logger.Error("BODY BIND Err:%v", err)
 		}
-		b.params = params
 	}
 	val, ok = b.params[key]
 	return
@@ -68,8 +71,8 @@ func (b *Body) Bytes() (r []byte) {
 
 func (b *Body) Buffer() *bytes.Buffer {
 	if b.buffer == nil {
-		reader := io.LimitReader(b.c.Request.Body, defaultMemory)
 		b.buffer = &bytes.Buffer{}
+		reader := io.LimitReader(b.c.Request.Body, defaultMemory)
 		_, b.Error = b.buffer.ReadFrom(reader)
 	}
 	return b.buffer
