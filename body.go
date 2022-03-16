@@ -2,6 +2,7 @@ package cosweb
 
 import (
 	"github.com/hwcer/cosgo/library/logger"
+	"github.com/hwcer/cosweb/binding"
 	"io"
 )
 
@@ -21,7 +22,7 @@ func (b *Body) release() {
 }
 
 func (b *Body) Len() int {
-	if _,err := b.Bytes();err!=nil{
+	if _, err := b.Bytes(); err != nil {
 		return 0
 	}
 	return len(b.bytes)
@@ -40,19 +41,29 @@ func (b *Body) Get(key string) (val interface{}, ok bool) {
 }
 
 func (b *Body) Read(p []byte) (n int, err error) {
-	if _,err = b.Bytes();err!=nil{
+	if _, err = b.Bytes(); err != nil {
 		return
 	}
 	n = copy(p, b.bytes)
 	return
 }
 
-func (b *Body) Bytes() ([]byte,error) {
+func (b *Body) Bytes() ([]byte, error) {
 	if b.bytes == nil {
 		var err error
-		if b.bytes, err = io.ReadAll(b.c.Request.Body);err!=nil{
-			return nil,err
+		reader := io.LimitReader(b.c.Request.Body, defaultMemory)
+		if b.bytes, err = io.ReadAll(reader); err != nil {
+			return nil, err
 		}
 	}
-	return b.bytes,nil
+	return b.bytes, nil
+}
+
+func (b *Body) Bind(i interface{}) error {
+	ct := b.c.Request.Header.Get(HeaderContentType)
+	h := binding.Handle(ct)
+	if h == nil {
+		return ErrMimeTypeNotFound
+	}
+	return h.Bind(b, i)
 }

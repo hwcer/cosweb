@@ -15,9 +15,9 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		scc              *utils.SCC
-		pool             sync.Pool
-		Binder           Binder
+		scc  *utils.SCC
+		pool sync.Pool
+		//Binder           Binder
 		Render           Render
 		Server           *http.Server
 		Router           *Router
@@ -63,7 +63,7 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	e.Server.Handler = e
 	e.RequestDataType = defaultRequestDataType
 	e.HTTPErrorHandler = e.DefaultHTTPErrorHandler
-	e.Binder = &DefaultBinder{}
+	//e.Binder = &DefaultBinder{}
 	e.pool.New = func() interface{} {
 		c := NewContext(e)
 		if e.NewPool != nil {

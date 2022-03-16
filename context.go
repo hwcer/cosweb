@@ -11,7 +11,7 @@ import (
 
 const (
 	indexPage     = "index.html"
-	defaultMemory = 32 << 20 // 32 MB
+	defaultMemory = 10 << 20 // 10 MB
 )
 
 type CCPool struct {
@@ -229,5 +229,5 @@ func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
 
 //Bind 绑定JSON XML
 func (c *Context) Bind(i interface{}) error {
-	return c.engine.Binder.Bind(c, i)
+	return c.Body.Bind(i)
 }

@@ -32,6 +32,7 @@ var (
 	ErrCookieNotFound              = errors.New("cookie not found")
 	ErrInvalidCertOrKeyType        = errors.New("invalid cert or key type, must be string or []byte")
 	ErrArgsNotFound                = errors.New("args not found")
+	ErrMimeTypeNotFound            = errors.New("mime type not found")
 )
 
 // Error makes it compatible with `error` interface.
