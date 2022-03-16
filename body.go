@@ -1,6 +1,7 @@
 package cosweb
 
 import (
+	"bytes"
 	"github.com/hwcer/cosgo/library/logger"
 	"github.com/hwcer/cosweb/binding"
 	"io"
@@ -12,20 +13,19 @@ func NewBody(c *Context) *Body {
 
 type Body struct {
 	c      *Context
-	bytes  []byte
+	Error  error
+	buffer *bytes.Buffer
 	params map[string]interface{}
 }
 
 func (b *Body) release() {
-	b.bytes = nil
+	b.Error = nil
 	b.params = nil
+	b.buffer = nil
 }
 
 func (b *Body) Len() int {
-	if _, err := b.Bytes(); err != nil {
-		return 0
-	}
-	return len(b.bytes)
+	return b.buffer.Len()
 }
 
 func (b *Body) Get(key string) (val interface{}, ok bool) {
@@ -41,22 +41,12 @@ func (b *Body) Get(key string) (val interface{}, ok bool) {
 }
 
 func (b *Body) Read(p []byte) (n int, err error) {
-	if _, err = b.Bytes(); err != nil {
-		return
+	buf := b.Buffer()
+	if b.Error != nil {
+		return 0, b.Error
 	}
-	n = copy(p, b.bytes)
+	n = copy(p, buf.Bytes())
 	return
-}
-
-func (b *Body) Bytes() ([]byte, error) {
-	if b.bytes == nil {
-		var err error
-		reader := io.LimitReader(b.c.Request.Body, defaultMemory)
-		if b.bytes, err = io.ReadAll(reader); err != nil {
-			return nil, err
-		}
-	}
-	return b.bytes, nil
 }
 
 func (b *Body) Bind(i interface{}) error {
@@ -66,4 +56,21 @@ func (b *Body) Bind(i interface{}) error {
 		return ErrMimeTypeNotFound
 	}
 	return h.Bind(b, i)
+}
+
+func (b *Body) Bytes() (r []byte) {
+	buf := b.Buffer()
+	if b.Error == nil {
+		r = buf.Bytes()
+	}
+	return
+}
+
+func (b *Body) Buffer() *bytes.Buffer {
+	if b.buffer == nil {
+		reader := io.LimitReader(b.c.Request.Body, defaultMemory)
+		b.buffer = &bytes.Buffer{}
+		_, b.Error = b.buffer.ReadFrom(reader)
+	}
+	return b.buffer
 }
