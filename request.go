@@ -11,7 +11,7 @@ type RequestDataTypeMap []RequestDataType
 const (
 	RequestDataTypeParam  RequestDataType = iota //params
 	RequestDataTypeForm                          //POST FORM
-	RequestDataTypeBody                          //bodyCache json and xml....
+	RequestDataTypeBody                          //POST json, xml,pb....
 	RequestDataTypeQuery                         //GET
 	RequestDataTypeCookie                        //COOKIES
 	RequestDataTypeHeader                        //HEADER

@@ -169,31 +169,26 @@ func (c *Context) Get(key string, dts ...RequestDataType) interface{} {
 	}
 	return ""
 }
-func (c *Context) GetInt(key string, dts ...RequestDataType) (r int) {
+func (c *Context) GetInt(key string, dts ...RequestDataType) (r int64) {
 	v := c.Get(key, dts...)
 	if v == nil {
 		return 0
 	}
 	switch v.(type) {
 	case int:
-		r = v.(int)
+		r = int64(v.(int))
 	case int32:
-		r = int(v.(int32))
+		r = int64(v.(int32))
 	case int64:
-		r = int(v.(int64))
+		r = int64(v.(int64))
 	case float32:
-		r = int(v.(float32))
+		r = int64(v.(float32))
 	case float64:
-		r = int(v.(float64))
+		r = int64(v.(float64))
 	case string:
-		x, _ := strconv.ParseInt(v.(string), 10, 64)
-		r = int(x)
+		r, _ = strconv.ParseInt(v.(string), 10, 64)
 	}
 	return
-}
-
-func (c *Context) GetInt32(key string, dts ...RequestDataType) (r int32) {
-	return int32(c.GetInt(key, dts...))
 }
 
 func (c *Context) GetFloat(key string, dts ...RequestDataType) (r float64) {
