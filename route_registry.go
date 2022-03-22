@@ -7,10 +7,6 @@ import (
 	"strings"
 )
 
-const (
-//RegistryPathName = "_RegistryPathName"
-)
-
 // 通过registry集中注册对象
 
 type RegistryCaller interface {
