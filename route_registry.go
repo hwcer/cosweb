@@ -2,7 +2,8 @@ package cosweb
 
 import (
 	"fmt"
-	"github.com/hwcer/cosgo/library/registry"
+	"github.com/hwcer/registry"
+	"path"
 	"reflect"
 	"strings"
 )
@@ -12,30 +13,34 @@ import (
 type RegistryCaller interface {
 	Caller(c *Context, fn reflect.Value) interface{}
 }
-type RegistryFilter func(pr, fn reflect.Value) bool
+
 type RegistrySerialize func(ctx *Context, reply interface{}) error
 
 //NewRegistry 创建新的路由组
 // prefix路由前缀
-func NewRegistry(prefix string) *Registry {
+func NewRegistry(prefix string, opts *registry.Options) *Registry {
 	r := &Registry{}
-	r.Registry = registry.New(prefix, r.filter)
+	if opts == nil {
+		opts = registry.NewOptions()
+	}
+	if opts.Filter == nil {
+		opts.Filter = r.filter
+	}
+	r.Registry = registry.New(opts)
 	r.middleware = make(map[string][]MiddlewareFunc)
+	r.prefix = opts.Clean(prefix)
 	return r
 }
 
 type Registry struct {
 	*registry.Registry
+	prefix     string
 	Caller     func(c *Context, pr reflect.Value, fn reflect.Value) (interface{}, error) //自定义全局消息调用
-	Filter     RegistryFilter
-	Serialize  RegistrySerialize //消息序列化封装
+	Serialize  RegistrySerialize                                                         //消息序列化封装
 	middleware map[string][]MiddlewareFunc
 }
 
 func (r *Registry) filter(pr, fn reflect.Value) bool {
-	if r.Filter != nil {
-		return r.Filter(pr, fn)
-	}
 	if !pr.IsValid() {
 		_, ok := fn.Interface().(func(*Context) interface{})
 		return ok
@@ -52,11 +57,20 @@ func (r *Registry) filter(pr, fn reflect.Value) bool {
 
 //handle cosweb入口
 func (r *Registry) handle(c *Context, next Next) (err error) {
-	path := c.Request.URL.Path
-	if path == "" || strings.Contains(path, ".") {
+	if c.Request.URL.Path == "" || strings.Contains(c.Request.URL.Path, ".") {
 		return next()
 	}
-	route, pr, fn, ok := r.Registry.Match(path[r.Index():])
+	urlPath := r.Clean(c.Request.URL.Path)
+	if r.prefix != "" {
+		urlPath = strings.TrimPrefix(urlPath, r.prefix)
+	}
+
+	route, ok := r.Match(urlPath)
+	if !ok {
+		return next()
+	}
+
+	pr, fn, ok := route.Match(urlPath)
 	if !ok {
 		return next()
 	}
@@ -100,8 +114,8 @@ func (r *Registry) caller(c *Context, pr, fn reflect.Value) (reply interface{}, 
 	return
 }
 
-func (r *Registry) Route(name string, middleware ...MiddlewareFunc) *registry.Route {
-	route := r.Registry.Route(name)
+func (r *Registry) Service(name string, middleware ...MiddlewareFunc) *registry.Service {
+	route := r.Registry.Service(name)
 	if len(middleware) > 0 {
 		s := route.Name()
 		r.middleware[s] = append(r.middleware[s], middleware...)
@@ -111,7 +125,9 @@ func (r *Registry) Route(name string, middleware ...MiddlewareFunc) *registry.Ro
 
 //Handle 注册服务器
 func (r *Registry) Handle(s *Server, method ...string) {
-	for _, path := range r.Paths() {
-		s.Register(path+"/*", r.handle, method...)
-	}
+	r.Range(func(name string, _ *registry.Service) bool {
+		route := path.Join(r.prefix, name, "*")
+		s.Register(route, r.handle, method...)
+		return true
+	})
 }

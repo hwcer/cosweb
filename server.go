@@ -127,7 +127,7 @@ func (s *Server) Static(prefix, root string, method ...string) *Static {
 
 //Registry 使用Registry 批量注册struct
 func (s *Server) Registry(prefix string, method ...string) (r *Registry) {
-	r = NewRegistry(prefix)
+	r = NewRegistry(prefix, nil)
 	r.Handle(s, method...)
 	return
 }
