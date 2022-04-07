@@ -171,9 +171,10 @@ func (this *Node) Params(path string) map[string]string {
 			r[k] = arr[i]
 		} else if strings.HasPrefix(s, RoutePathName_Vague) {
 			k := strings.TrimPrefix(s, RoutePathName_Vague)
-			if k != "" {
-				r[k] = strings.Join(arr[i:], "/")
+			if k == "" {
+				k = RoutePathName_Vague
 			}
+			r[k] = strings.Join(arr[i:], "/")
 		}
 
 	}
