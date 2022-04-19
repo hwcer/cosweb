@@ -88,7 +88,7 @@ func (s *Server) DefaultHTTPErrorHandler(c *Context, err error) {
 		c.Bytes(ContentTypeTextPlain, []byte(he.String()))
 	}
 	if he.Code != http.StatusNotFound {
-		logger.Error(he.String())
+		logger.Error(he)
 	}
 }
 
