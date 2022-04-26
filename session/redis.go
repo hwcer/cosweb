@@ -19,8 +19,7 @@ type Redis struct {
 }
 
 func NewRedis(address string) (*Redis, error) {
-	addr := utils.NewAddress(address)
-	uri, _ := addr.URL("tcp")
+	uri, _ := utils.NewUrl(address, "tcp")
 	c := &Redis{
 		prefix:  "cookie",
 		address: uri,
