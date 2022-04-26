@@ -4,10 +4,10 @@ go 1.17
 
 replace github.com/hwcer/cosweb v0.0.0 => ./
 
+
 require (
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/golang/protobuf v1.5.2
-	github.com/hwcer/cosgo v0.0.0-20220406081012-b723dbd83415
 	github.com/hwcer/registry v0.0.0-20220406082804-0cf22b0b2cb6
 	github.com/stretchr/testify v1.7.0
 	github.com/ugorji/go/codec v1.1.7
