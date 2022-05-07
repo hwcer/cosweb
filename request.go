@@ -17,6 +17,12 @@ const (
 	RequestDataTypeHeader                        //HEADER
 )
 
+//默认session id获取方式
+var defaultSessionDataType = RequestDataTypeMap{RequestDataTypeQuery, RequestDataTypeCookie, RequestDataTypeHeader}
+
+//默认获取数据的顺序
+var defaultRequestDataType = RequestDataTypeMap{RequestDataTypeParam, RequestDataTypeQuery, RequestDataTypeBody, RequestDataTypeCookie}
+
 func (r RequestDataTypeMap) IndexOf(v RequestDataType) int {
 	for i, t := range r {
 		if t == v {
@@ -36,9 +42,6 @@ func (r *RequestDataTypeMap) Add(keys ...RequestDataType) {
 func (r *RequestDataTypeMap) Reset(keys ...RequestDataType) {
 	*r = keys
 }
-
-//默认获取数据的顺序
-var defaultRequestDataType = RequestDataTypeMap{RequestDataTypeParam, RequestDataTypeQuery, RequestDataTypeBody, RequestDataTypeCookie}
 
 func getDataFromRequest(c *Context, key string, dataType RequestDataType) (interface{}, bool) {
 	switch dataType {

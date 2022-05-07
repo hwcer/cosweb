@@ -22,6 +22,7 @@ type (
 		Server           *http.Server
 		Router           *Router
 		middleware       []MiddlewareFunc   //中间件
+		SessionDataType  RequestDataTypeMap //获取SESSION ID时默认的查询方式
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
 		NewPool          func(*Context) (i interface{}, reset func(), release func())
@@ -61,6 +62,7 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 		e.Server.TLSConfig = tlsConfig[0]
 	}
 	e.Server.Handler = e
+	e.SessionDataType = defaultSessionDataType
 	e.RequestDataType = defaultRequestDataType
 	e.HTTPErrorHandler = e.DefaultHTTPErrorHandler
 	//e.Binder = &DefaultBinder{}

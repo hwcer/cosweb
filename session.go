@@ -39,7 +39,7 @@ func (this *Session) Start(level SessionStartType, sid ...string) (err error) {
 	if len(sid) > 0 {
 		this.sid = sid[0]
 	} else {
-		this.sid = this.c.Cookie.Get(session.Options.Name)
+		this.sid = this.c.GetString(session.Options.Name, this.c.engine.SessionDataType...)
 	}
 	if this.sid == "" {
 		return session.ErrorSessionIdEmpty

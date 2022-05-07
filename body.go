@@ -27,7 +27,7 @@ func (b *Body) release() {
 func (b *Body) Len() (r int) {
 	buf := b.Buffer()
 	if b.Error == nil {
-		 r=buf.Len()
+		r = buf.Len()
 	}
 	return
 }
@@ -53,6 +53,9 @@ func (b *Body) Read(p []byte) (n int, err error) {
 }
 
 func (b *Body) Bind(i interface{}) error {
+	if b.Len() == 0 {
+		return nil
+	}
 	ct := b.c.Request.Header.Get(HeaderContentType)
 	h := binding.Handle(ct)
 	if h == nil {
@@ -60,7 +63,6 @@ func (b *Body) Bind(i interface{}) error {
 	}
 	return h.Bind(b, i)
 }
-
 func (b *Body) Bytes() (r []byte) {
 	buf := b.Buffer()
 	if b.Error == nil {
