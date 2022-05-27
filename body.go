@@ -2,7 +2,6 @@ package cosweb
 
 import (
 	"bytes"
-	"github.com/hwcer/cosgo/library/logger"
 	"github.com/hwcer/cosweb/binding"
 	"io"
 )
@@ -35,9 +34,7 @@ func (b *Body) Len() (r int) {
 func (b *Body) Get(key string) (val interface{}, ok bool) {
 	if b.params == nil {
 		b.params = make(map[string]interface{}, 0)
-		if err := b.c.Bind(&b.params); err != nil {
-			logger.Error("BODY BIND Err:%v", err)
-		}
+		_ = b.Bind(&b.params)
 	}
 	val, ok = b.params[key]
 	return
@@ -53,13 +50,13 @@ func (b *Body) Read(p []byte) (n int, err error) {
 }
 
 func (b *Body) Bind(i interface{}) error {
-	if b.Len() == 0 {
-		return nil
-	}
 	ct := b.c.Request.Header.Get(HeaderContentType)
 	h := binding.Handle(ct)
 	if h == nil {
 		return ErrMimeTypeNotFound
+	}
+	if b.Len() == 0 {
+		return nil
 	}
 	return h.Bind(b, i)
 }

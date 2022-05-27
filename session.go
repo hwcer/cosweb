@@ -20,7 +20,7 @@ func NewSession(c *Context) *Session {
 
 type Session struct {
 	c      *Context
-	sid    string
+	sid    string //session id
 	key    string
 	uuid   string //用户唯一标志
 	cache  map[string]interface{}

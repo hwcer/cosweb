@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"path/filepath"
+	"strings"
 )
 
 var funcs template.FuncMap
@@ -78,7 +79,9 @@ func New(opts *Options) *Render {
 // HTML executes the template and writes to the responsewriter
 func (r *Render) Render(buf io.Writer, name string, data interface{}) error {
 	// re-compile on every render call when Debug is true
-	name += r.Options.Ext
+	if !strings.HasSuffix(name, r.Options.Ext) {
+		name += r.Options.Ext
+	}
 	if r.Options.Debug {
 		r.compileTemplatesFromDir()
 	}

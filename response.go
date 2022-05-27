@@ -26,6 +26,11 @@ func (c *Context) Write(b []byte) (n int, err error) {
 	return
 }
 
+//Writable 是否可写，如果已经写入头则返回FALSE
+func (c *Context) Writable() bool {
+	return c.Response.Header().Get(HeaderContentType) == ""
+}
+
 // Status sends an HTTP Response header with status code. If Status is
 // not called explicitly, the first call to Write will trigger an implicit
 // Status(http.StatusOK). Thus explicit calls to Status are mainly
