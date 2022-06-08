@@ -7,7 +7,7 @@ replace github.com/hwcer/cosweb v0.0.0 => ./
 require (
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/golang/protobuf v1.5.2
-	github.com/hwcer/cosgo v0.0.0-20220507065546-60dfb4190d31
+	github.com/hwcer/cosgo v0.0.0-20220608073810-65a13faaa153
 	github.com/hwcer/registry v0.0.0-20220608090408-8c00405fd51c
 	github.com/stretchr/testify v1.7.0
 	github.com/ugorji/go/codec v1.1.7
