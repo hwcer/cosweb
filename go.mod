@@ -3,12 +3,13 @@ module github.com/hwcer/cosweb
 go 1.17
 
 replace github.com/hwcer/cosweb v0.0.0 => ./
+replace github.com/hwcer/registry v0.0.0 => ../registry
 
 require (
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/golang/protobuf v1.5.2
-	github.com/hwcer/cosgo v0.0.0-20220608073810-65a13faaa153
-	github.com/hwcer/registry v0.0.0-20220608090408-8c00405fd51c
+	github.com/hwcer/cosgo v0.0.0-20220616034900-0d84f8acb2f8
+	github.com/hwcer/registry v0.0.0
 	github.com/stretchr/testify v1.7.0
 	github.com/ugorji/go/codec v1.1.7
 	golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871

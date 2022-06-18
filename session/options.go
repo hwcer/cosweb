@@ -17,19 +17,19 @@ var Options = struct {
 	Secret: "UVFGHIJABCopqDNO",
 }
 
-func Decode(sid string) (key string, err error) {
+func Decode(sid string) (uid string, err error) {
 	str, err := utils.Crypto.AESDecrypt(sid, Options.Secret)
 	if err != nil {
 		return "", err
 	}
-	key = str[SessionContextRandomStringLength:]
+	uid = str[SessionContextRandomStringLength:]
 	return
 }
 
-func Encode(key string) (sid string, err error) {
+func Encode(uid string) (sid string, err error) {
 	var arr []string
 	arr = append(arr, utils.Random.String(SessionContextRandomStringLength))
-	arr = append(arr, key)
+	arr = append(arr, uid)
 	str := strings.Join(arr, "")
 	return utils.Crypto.AESEncrypt(str, Options.Secret)
 }

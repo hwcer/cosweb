@@ -73,7 +73,7 @@ type Registry struct {
 	Serialize RegistrySerialize //消息序列化封装
 }
 
-func (r *Registry) filter(pr, fn reflect.Value) bool {
+func (r *Registry) filter(s *registry.Service, pr, fn reflect.Value) bool {
 	if !pr.IsValid() {
 		_, ok := fn.Interface().(func(*Context) interface{})
 		return ok

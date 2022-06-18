@@ -1,34 +1,152 @@
 package session
 
-var storage Storage
+import (
+	"github.com/hwcer/cosgo/values"
+)
 
-type Storage interface {
-	Get(key string, lock bool) (uid string, data map[string]interface{}, err error)                       //获取session镜像数据
-	Save(key string, data map[string]interface{}, expire int64, unlock bool) error                        //设置(覆盖)session数据
-	Create(uid string, data map[string]interface{}, expire int64, lock bool) (sid, key string, err error) //用户登录创建新session
-	Delete(key string) error                                                                              //退出登录删除SESSION
-	Start() error                                                                                         //启动服务器时初始化SESSION Storage
-	Close() error                                                                                         //关闭服务器时断开连接等
+type StartType uint8
+
+const (
+	StartTypeNone StartType = 0 //不需要验证登录
+	StartTypeAuth StartType = 1 //需要登录
+	StartTypeLock StartType = 2 //需要登录，并且锁定,用户级别防并发
+)
+
+func New() *Session {
+	return &Session{}
 }
 
-func Set(s Storage) {
-	storage = s
+type Session struct {
+	//key    string
+	uuid   string //用户唯一标志
+	token  string //session id
+	cache  values.Values
+	dirty  []string
+	locked bool
 }
 
-func Get() Storage {
-	return storage
-}
-
-func Start() error {
+func (this *Session) Start(level StartType) (err error) {
 	if storage == nil {
-		storage = NewMemory()
+		return ErrorStorageNotSet
 	}
-	return storage.Start()
-}
-func Close() error {
-	if storage != nil {
-		return storage.Close()
-	} else {
+	if level == StartTypeNone {
 		return nil
 	}
+	if this.token == "" {
+		return ErrorSessionIdEmpty
+	}
+
+	var lock bool
+	if level == StartTypeLock {
+		lock = true
+	}
+
+	if this.uuid, this.cache, err = storage.Get(this.token, lock); err != nil {
+		return err
+	} else if len(this.cache) == 0 {
+		return ErrorSessionNotExist
+	}
+	if lock {
+		this.locked = lock
+	}
+	return nil
+}
+
+func (this *Session) Get(key string) (v interface{}) {
+	if this.cache != nil {
+		v = this.cache.Get(key)
+	}
+	return
+}
+func (this *Session) GetInt32(key string) (v int32) {
+	if this.cache != nil {
+		v = this.cache.GetInt32(key)
+	}
+	return
+}
+func (this *Session) GetInt64(key string) (v int64) {
+	if this.cache != nil {
+		v = this.cache.GetInt64(key)
+	}
+	return
+}
+func (this *Session) GetString(key string) (v string) {
+	if this.cache != nil {
+		v = this.cache.GetString(key)
+	}
+	return
+}
+
+func (this *Session) Set(key string, val interface{}) bool {
+	if this.cache == nil {
+		return false
+	}
+	this.dirty = append(this.dirty, key)
+	this.cache[key] = val
+	return true
+}
+
+func (this *Session) All() values.Values {
+	data := make(values.Values, len(this.cache))
+	for k, v := range this.cache {
+		data.Set(k, v)
+	}
+	return data
+}
+
+//UUid 获取玩家uuid
+func (this *Session) UUid() string {
+	return this.uuid
+}
+
+//Create 创建SESSION，uuid 用户唯一ID，可以检测是不是重复登录
+func (this *Session) Create(uuid string, data values.Values) (token string, err error) {
+	if storage == nil {
+		return "", ErrorStorageNotSet
+	}
+
+	this.token, err = storage.Create(uuid, data, Options.MaxAge, true)
+	if err != nil {
+		return "", err
+	}
+	this.uuid = uuid
+	this.cache = data
+	this.locked = true
+	return this.token, nil
+}
+
+func (this *Session) Delete() (err error) {
+	if storage == nil || this.uuid == "" {
+		return nil
+	}
+	if err = storage.Delete(this.uuid); err != nil {
+		return
+	}
+	this.release()
+	return
+}
+
+func (this *Session) Reset(token string) {
+	this.token = token
+}
+
+//Release 释放 session 由HTTP SERVER
+func (this *Session) Release() {
+	if this.uuid == "" || this.token == "" {
+		return
+	}
+	data := make(values.Values)
+	for _, k := range this.dirty {
+		data[k] = this.cache[k]
+	}
+	_ = storage.Save(this.uuid, data, Options.MaxAge, this.locked)
+	this.release()
+}
+
+func (this *Session) release() {
+	this.uuid = ""
+	this.token = ""
+	this.cache = nil
+	this.dirty = nil
+	this.locked = false
 }

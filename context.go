@@ -2,6 +2,7 @@ package cosweb
 
 import (
 	"fmt"
+	"github.com/hwcer/cosweb/session"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,7 +30,7 @@ type Context struct {
 	aborted  int
 	Body     *Body
 	Cookie   *Cookie
-	Session  *Session
+	Session  *session.Session
 	Request  *http.Request
 	Response http.ResponseWriter
 }
@@ -41,13 +42,14 @@ func NewContext(s *Server) *Context {
 	}
 	c.Body = NewBody(c)
 	c.Cookie = NewCookie(c)
-	c.Session = NewSession(c)
+	c.Session = session.New()
 	return c
 }
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Request = r
 	c.Response = w
+	c.Session.Reset(c.GetString(session.Options.Name, c.engine.SessionDataType...))
 }
 
 //释放资源,准备进入缓存池
@@ -59,7 +61,7 @@ func (c *Context) release() {
 	c.Response = nil
 	c.Body.release()
 	c.Cookie.release()
-	c.Session.release()
+	c.Session.Release()
 }
 
 func (c *Context) next() error {

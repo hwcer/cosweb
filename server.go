@@ -15,17 +15,17 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		scc  *utils.SCC
-		pool sync.Pool
-		//Binder           Binder
+		scc              *utils.SCC
+		pool             sync.Pool
+		middleware       []MiddlewareFunc //中间件
 		Render           Render
 		Server           *http.Server
 		Router           *Router
-		middleware       []MiddlewareFunc   //中间件
 		SessionDataType  RequestDataTypeMap //获取SESSION ID时默认的查询方式
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
-		NewPool          func(*Context) (i interface{}, reset func(), release func())
+
+		//NewPool          func(*Context) (i interface{}, reset func(), release func())
 	}
 	Next func() error
 	// HandlerFunc defines a function to serve HTTP requests.
@@ -68,10 +68,10 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	//e.Binder = &DefaultBinder{}
 	e.pool.New = func() interface{} {
 		c := NewContext(e)
-		if e.NewPool != nil {
-			c.pool = &CCPool{}
-			c.pool.data, c.pool.reset, c.pool.release = e.NewPool(c)
-		}
+		//if e.NewPool != nil {
+		//	c.pool = &CCPool{}
+		//	c.pool.data, c.pool.reset, c.pool.release = e.NewPool(c)
+		//}
 		return c
 	}
 	e.Router = NewRouter()
@@ -221,7 +221,7 @@ func (s *Server) Start(address string) (err error) {
 	if err != nil && err != utils.ErrorTimeout {
 		return err
 	}
-	return session.Start()
+	return nil
 }
 
 //立即关闭

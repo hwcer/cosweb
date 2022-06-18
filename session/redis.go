@@ -3,26 +3,30 @@ package session
 import (
 	"github.com/go-redis/redis"
 	"github.com/hwcer/cosgo/utils"
+	"github.com/hwcer/cosgo/values"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const redisSessionKeyUid = "_s_uid"
-const redisSessionKeyLock = "_s_lock"
+const redisSessionKeyUid = "_sess_uid"
+const redisSessionKeyLock = "_sess_lock"
 
 type Redis struct {
-	prefix  string
+	prefix  []string
 	client  *redis.Client
 	address *url.URL
 }
 
-func NewRedis(address string) (*Redis, error) {
+func NewRedis(address string, prefix ...string) (*Redis, error) {
 	uri, _ := utils.NewUrl(address, "tcp")
 	c := &Redis{
-		prefix:  "cookie",
+		prefix:  prefix,
 		address: uri,
+	}
+	if len(c.prefix) == 0 {
+		c.prefix = append(c.prefix, "-cookie")
 	}
 	return c, nil
 }
@@ -58,73 +62,74 @@ func (this *Redis) Start() (err error) {
 }
 
 func (this *Redis) Close() error {
-	this.client.Close()
-	return nil
+	return this.client.Close()
 }
 
-func (this *Redis) rkey(uid string) string {
-	return strings.Join([]string{this.prefix, uid}, "-")
+func (this *Redis) rkey(uuid string) string {
+	return strings.Join(append(this.prefix, uuid), "-")
 }
 
-func (this *Redis) lock(rkey string, data map[string]string) bool {
-	var num int64
-	var err error
-	if num, err = strconv.ParseInt(data[redisSessionKeyLock], 10, 10); err != nil || num > 0 {
-		return false
+func (this *Redis) lock(rkey string, data values.Values) bool {
+	if data != nil {
+		if v := data.GetInt64(redisSessionKeyLock); v > 0 {
+			return false
+		}
 	}
-	if num, err = this.client.HIncrBy(rkey, redisSessionKeyLock, 1).Result(); err != nil || num > 1 {
+	if v, err := this.client.HIncrBy(rkey, redisSessionKeyLock, 1).Result(); err != nil || v > 1 {
 		return false
 	}
 	return true
 }
 
-//获取session镜像数据
-func (this *Redis) Get(key string, lock bool) (uid string, data map[string]interface{}, err error) {
-	var ok bool
+//Get 获取session镜像数据
+func (this *Redis) Get(token string, lock bool) (uuid string, data values.Values, err error) {
+
+	if uuid, err = Decode(token); err != nil {
+		return
+	}
 	var val map[string]string
-	rkey := this.rkey(key)
+	rkey := this.rkey(uuid)
 	if val, err = this.client.HGetAll(rkey).Result(); err != nil {
 		return
 	}
-	if uid, ok = val[redisSessionKeyUid]; !ok {
+	if v, ok := val[redisSessionKeyUid]; !ok {
 		return "", nil, ErrorSessionNotExist
+	} else if v != uuid {
+		return "", nil, ErrorSessionIllegal
 	}
-	if lock && !this.lock(rkey, val) {
-		return "", nil, ErrorSessionLocked
-	}
-	data = make(map[string]interface{}, len(val))
+
+	data = make(values.Values, len(val))
 	for k, v := range val {
-		data[k] = v
+		data.Set(k, v)
+	}
+
+	if lock && !this.lock(rkey, data) {
+		return "", nil, ErrorSessionLocked
 	}
 	return
 }
 
-func (this *Redis) Create(uid string, data map[string]interface{}, expire int64, lock bool) (sid, key string, err error) {
-	key = uid
-	data[redisSessionKeyUid] = uid
+//Create ttl过期时间(s)
+func (this *Redis) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
+	rkey := this.rkey(uuid)
 	if lock {
-		data[redisSessionKeyLock] = 1
+		data.Set(redisSessionKeyLock, 1)
+	} else {
+		data.Set(redisSessionKeyLock, 0)
 	}
-	rkey := this.rkey(uid)
-	//pipeline := this.client.Pipeline()
+	data[redisSessionKeyUid] = uuid
 	if err = this.client.HMSet(rkey, data).Err(); err != nil {
 		return
 	}
-
-	if expire > 0 {
-		if err = this.client.ExpireAt(rkey, time.Unix(expire, 0)).Err(); err != nil {
-			return
-		}
+	if ttl > 0 {
+		this.client.Expire(rkey, time.Duration(ttl)*time.Second)
 	}
-	sid, err = Encode(uid)
+	token, err = Encode(uuid)
 	return
 
 }
-func (this *Redis) Save(key string, data map[string]interface{}, expire int64, unlock bool) (err error) {
-	rkey := this.rkey(key)
-	if data == nil {
-		data = make(map[string]interface{})
-	}
+func (this *Redis) Save(uuid string, data values.Values, ttl int64, unlock bool) (err error) {
+	rkey := this.rkey(uuid)
 	//pipeline := this.client.Pipeline()
 	if unlock {
 		data[redisSessionKeyLock] = int64(0)
@@ -135,17 +140,15 @@ func (this *Redis) Save(key string, data map[string]interface{}, expire int64, u
 			return
 		}
 	}
-	if expire > 0 {
-		if _, err = this.client.ExpireAt(rkey, time.Unix(expire, 0)).Result(); err != nil {
-			return
-		}
+	if ttl > 0 {
+		this.client.Expire(rkey, time.Duration(ttl)*time.Second)
 	}
 
 	return
 }
 
-func (this *Redis) Delete(key string) (err error) {
-	rkey := this.rkey(key)
+func (this *Redis) Delete(uuid string) (err error) {
+	rkey := this.rkey(uuid)
 	_, err = this.client.Del(rkey).Result()
 	return
 }
