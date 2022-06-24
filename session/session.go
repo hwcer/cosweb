@@ -18,17 +18,21 @@ func New() *Session {
 
 type Session struct {
 	//key    string
-	uuid   string //用户唯一标志
+	uuid   string //store key
 	token  string //session id
 	cache  values.Values
 	dirty  []string
 	locked bool
 }
 
-func (this *Session) Start(level StartType) (err error) {
-	if storage == nil {
+func (this *Session) Start(level StartType, token ...string) (err error) {
+	if Options.storage == nil {
 		return ErrorStorageNotSet
 	}
+	if len(token) > 0 {
+		this.token = token[0]
+	}
+
 	if level == StartTypeNone {
 		return nil
 	}
@@ -41,7 +45,7 @@ func (this *Session) Start(level StartType) (err error) {
 		lock = true
 	}
 
-	if this.uuid, this.cache, err = storage.Get(this.token, lock); err != nil {
+	if this.uuid, this.cache, err = Options.storage.Get(this.token, lock); err != nil {
 		return err
 	} else if len(this.cache) == 0 {
 		return ErrorSessionNotExist
@@ -94,18 +98,13 @@ func (this *Session) All() values.Values {
 	return data
 }
 
-//UUid 获取玩家uuid
-func (this *Session) UUid() string {
-	return this.uuid
-}
-
 //Create 创建SESSION，uuid 用户唯一ID，可以检测是不是重复登录
 func (this *Session) Create(uuid string, data values.Values) (token string, err error) {
-	if storage == nil {
+	if Options.storage == nil {
 		return "", ErrorStorageNotSet
 	}
 
-	this.token, err = storage.Create(uuid, data, Options.MaxAge, true)
+	this.token, err = Options.storage.Create(uuid, data, Options.MaxAge, true)
 	if err != nil {
 		return "", err
 	}
@@ -116,10 +115,10 @@ func (this *Session) Create(uuid string, data values.Values) (token string, err 
 }
 
 func (this *Session) Delete() (err error) {
-	if storage == nil || this.uuid == "" {
+	if Options.storage == nil || this.uuid == "" {
 		return nil
 	}
-	if err = storage.Delete(this.uuid); err != nil {
+	if err = Options.storage.Delete(this.uuid); err != nil {
 		return
 	}
 	this.release()
@@ -139,7 +138,7 @@ func (this *Session) Release() {
 	for _, k := range this.dirty {
 		data[k] = this.cache[k]
 	}
-	_ = storage.Save(this.uuid, data, Options.MaxAge, this.locked)
+	_ = Options.storage.Save(this.uuid, data, Options.MaxAge, this.locked)
 	this.release()
 }
 

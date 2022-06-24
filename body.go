@@ -2,8 +2,11 @@ package cosweb
 
 import (
 	"bytes"
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosweb/binding"
 	"io"
+	"mime"
+	"net/url"
 )
 
 func NewBody(c *Context) *Body {
@@ -14,7 +17,7 @@ type Body struct {
 	c      *Context
 	Error  error
 	buffer *bytes.Buffer
-	params map[string]interface{}
+	params values.Values
 }
 
 func (b *Body) release() {
@@ -31,10 +34,31 @@ func (b *Body) Len() (r int) {
 	return
 }
 
+func (b *Body) ParseForm() (values.Values, error) {
+	if b.params != nil {
+		return b.params, nil
+	}
+	b.params = make(values.Values, 0)
+	d := b.Bytes()
+	query, err := url.ParseQuery(string(d))
+	if err != nil {
+		return nil, err
+	}
+	for k, _ := range query {
+		b.params.Set(k, query.Get(k))
+	}
+	return b.params, nil
+}
+
 func (b *Body) Get(key string) (val interface{}, ok bool) {
 	if b.params == nil {
-		b.params = make(map[string]interface{}, 0)
-		_ = b.Bind(&b.params)
+		ct, _, _ := mime.ParseMediaType(b.c.Request.Header.Get(HeaderContentType))
+		if ct == binding.MIMEPOSTForm {
+			_, _ = b.ParseForm()
+		} else {
+			b.params = make(values.Values, 0)
+			_ = b.Bind(&b.params)
+		}
 	}
 	val, ok = b.params[key]
 	return

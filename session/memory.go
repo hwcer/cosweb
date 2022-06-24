@@ -2,6 +2,7 @@ package session
 
 import (
 	"github.com/hwcer/cosgo/storage/cache"
+	"github.com/hwcer/cosgo/values"
 	"time"
 )
 
@@ -36,7 +37,7 @@ func (this *Memory) get(key string) (*Setter, error) {
 	if id, err = cache.Decode(key); err != nil {
 		return nil, err
 	}
-	var data cache.Dataset
+	var data cache.Interface
 	if data, ok = this.Cache.Get(id); !ok || data == nil {
 		return nil, ErrorSessionNotExist
 	}
@@ -50,47 +51,49 @@ func (this *Memory) get(key string) (*Setter, error) {
 	return val, nil
 }
 
-func (this *Memory) Get(key string, lock bool) (uid string, result map[string]interface{}, err error) {
+func (this *Memory) Get(token string, lock bool) (uuid string, result values.Values, err error) {
 	var ok bool
 	var data *Setter
-	if data, err = this.get(key); err != nil {
-		return "", nil, err
+	if uuid, err = Decode(token); err != nil {
+		return
+	}
+	if data, err = this.get(uuid); err != nil {
+		return
 	}
 	if lock && !data.Lock() {
 		return "", nil, ErrorSessionLocked
 	}
-	uid = data.uid
-	var val map[string]interface{}
-	if val, ok = data.Get().(map[string]interface{}); !ok {
+
+	var val values.Values
+	if val, ok = data.Get().(values.Values); !ok {
 		return "", nil, ErrorSessionTypeError
 	}
-	result = make(map[string]interface{}, len(val))
+	result = make(values.Values, len(val))
 	for k, v := range val {
-		result[k] = v
+		result.Set(k, v)
 	}
 	return
 }
 
-func (this *Memory) Save(key string, data map[string]interface{}, expire int64, unlock bool) (err error) {
+func (this *Memory) Save(uuid string, data values.Values, ttl int64, unlock bool) (err error) {
 	var setter *Setter
-	if setter, err = this.get(key); err != nil {
+	if setter, err = this.get(uuid); err != nil {
 		return err
 	}
-	var ok bool
-	var value map[string]interface{}
-	if value, ok = setter.Get().(map[string]interface{}); !ok {
+	value := setter.Values()
+	if value == nil {
 		return ErrorSessionTypeError
 	}
-	result := make(map[string]interface{})
+
 	for k, v := range value {
-		result[k] = v
+		if !data.Has(k) {
+			data.Set(k, v)
+		}
 	}
-	for k, v := range data {
-		result[k] = v
-	}
-	setter.Set(result)
-	if expire > 0 {
-		setter.Expire(expire)
+
+	setter.Set(data)
+	if ttl > 0 {
+		setter.Expire(ttl)
 	}
 	if unlock {
 		setter.UnLock()
@@ -101,17 +104,12 @@ func (this *Memory) Save(key string, data map[string]interface{}, expire int64, 
 //Create 创建新SESSION,返回SESSION Index
 //Create会自动设置有效期
 //Create新数据为锁定状态
-func (this *Memory) Create(uid string, data map[string]interface{}, expire int64, lock bool) (sid, key string, err error) {
-	id := this.Cache.Push(data)
-	key = cache.Encode(id)
-	sid, err = Encode(key)
-	var setter *Setter
-	if setter, err = this.get(key); err != nil {
-		return "", "", err
-	}
-	setter.uid = uid
-	if expire > 0 {
-		setter.Expire(expire)
+func (this *Memory) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
+	i := this.Cache.Push(data)
+	token, err = Encode(cache.Encode(i.Id()))
+	setter, _ := i.(*Setter)
+	if ttl > 0 {
+		setter.Expire(ttl)
 	}
 	if lock {
 		setter.Lock()
@@ -156,7 +154,7 @@ func (this *Memory) worker() {
 func (this *Memory) clean() {
 	nowTime := time.Now().Unix()
 	var remove []uint64
-	this.Cache.Range(func(item cache.Dataset) bool {
+	this.Cache.Range(func(item cache.Interface) bool {
 		if data, ok := item.(*Setter); ok && data.expire < nowTime {
 			remove = append(remove, item.Id())
 		}
