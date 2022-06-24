@@ -22,22 +22,7 @@ type RegistryHandler struct {
 	Middleware []MiddlewareFunc  //中间件
 }
 
-func (this *RegistryHandler) Copy(src *RegistryHandler) {
-	if src.Caller != nil {
-		this.Caller = src.Caller
-	}
-	if src.Serialize != nil {
-		this.Serialize = src.Serialize
-	}
-	if len(src.Middleware) > 0 {
-		this.Middleware = append(this.Middleware, src.Middleware...)
-	}
-}
-
 func (this *RegistryHandler) Use(src interface{}) {
-	if v, ok := src.(*RegistryHandler); ok {
-		this.Copy(v)
-	}
 	if v, ok := src.(RegistryCaller); ok {
 		this.Caller = v
 	}
