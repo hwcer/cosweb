@@ -7,7 +7,6 @@ package binding
 import (
 	"github.com/golang/protobuf/proto"
 	"io"
-	"io/ioutil"
 )
 
 func init() {
@@ -22,14 +21,14 @@ func (protobufBinding) Name() string {
 }
 
 func (b protobufBinding) Bind(body io.Reader, obj interface{}) error {
-	buf, err := ioutil.ReadAll(body)
+	buf, err := io.ReadAll(body)
 	if err != nil {
 		return err
 	}
-	return b.BindBody(buf, obj)
+	return b.Unmarshal(buf, obj)
 }
 
-func (protobufBinding) BindBody(body []byte, obj interface{}) error {
+func (protobufBinding) Unmarshal(body []byte, obj interface{}) error {
 	if err := proto.Unmarshal(body, obj.(proto.Message)); err != nil {
 		return err
 	}

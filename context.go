@@ -25,6 +25,7 @@ type CCPool struct {
 type Context struct {
 	pool     *CCPool //缓存逻辑层对象
 	query    url.Values
+	route    []string
 	params   map[string]string
 	engine   *Server
 	aborted  int
@@ -40,7 +41,7 @@ func NewContext(s *Server) *Context {
 	c := &Context{
 		engine: s,
 	}
-	c.Body = NewBody(c)
+	c.Body = NewBody()
 	c.Cookie = NewCookie(c)
 	c.Session = session.New()
 	return c
@@ -49,17 +50,18 @@ func NewContext(s *Server) *Context {
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Request = r
 	c.Response = w
-	c.Session.Reset(c.GetString(session.Options.Name, c.engine.SessionDataType...))
+	c.Body.Reset(r)
 }
 
 //释放资源,准备进入缓存池
 func (c *Context) release() {
 	c.query = nil
+	c.route = nil
 	c.params = nil
 	c.aborted = 0
 	c.Request = nil
 	c.Response = nil
-	c.Body.release()
+	c.Body.Release()
 	c.Cookie.release()
 	c.Session.Release()
 }
@@ -77,6 +79,7 @@ func (c *Context) doHandle(nodes []*Node) (err error) {
 	num := c.aborted
 	for _, node := range nodes {
 		num -= 1
+		c.route = node.Route
 		c.params = node.Params(c.Request.URL.Path)
 		err = node.Handler(c, c.next)
 		if err != nil || c.aborted != num {
@@ -115,6 +118,11 @@ func (c *Context) Pool() (i interface{}) {
 		i = c.pool.data
 	}
 	return
+}
+
+//Route 当期匹配的路由
+func (c *Context) Route() string {
+	return strings.Join(c.route, "/")
 }
 
 //IsWebSocket 判断是否WebSocket

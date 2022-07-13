@@ -83,7 +83,6 @@ func (this *Redis) lock(rkey string, data values.Values) bool {
 
 //Get 获取session镜像数据
 func (this *Redis) Get(token string, lock bool) (uuid string, data values.Values, err error) {
-
 	if uuid, err = Decode(token); err != nil {
 		return
 	}

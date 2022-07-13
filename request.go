@@ -1,7 +1,7 @@
 package cosweb
 
 import (
-	"github.com/hwcer/cosgo/library/logger"
+	"github.com/hwcer/cosgo/logger"
 	"net/url"
 )
 
@@ -9,12 +9,12 @@ type RequestDataType int
 type RequestDataTypeMap []RequestDataType
 
 const (
-	RequestDataTypeParam  RequestDataType = iota //params
-	RequestDataTypeForm                          //POST FORM
-	RequestDataTypeBody                          //POST json, xml,pb....
-	RequestDataTypeQuery                         //GET
-	RequestDataTypeCookie                        //COOKIES
-	RequestDataTypeHeader                        //HEADER
+	RequestDataTypeParam RequestDataType = iota //params
+	//RequestDataTypeForm                          //POST FORM
+	RequestDataTypeBody   //POST json, xml,pb....
+	RequestDataTypeQuery  //GET
+	RequestDataTypeCookie //COOKIES
+	RequestDataTypeHeader //HEADER
 )
 
 //默认session id获取方式
@@ -52,10 +52,10 @@ func getDataFromRequest(c *Context, key string, dataType RequestDataType) (inter
 		return getQueryValue(c, key)
 	case RequestDataTypeBody:
 		return c.Body.Get(key)
-	case RequestDataTypeForm:
-		if v := c.Request.FormValue(key); v != "" {
-			return v, true
-		}
+	//case RequestDataTypeForm:
+	//	if v := c.Request.FormValue(key); v != "" {
+	//		return v, true
+	//	}
 	case RequestDataTypeCookie:
 		if val, err := c.Request.Cookie(key); err == nil && val.Value != "" {
 			return val.Value, true

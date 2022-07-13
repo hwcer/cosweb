@@ -1,16 +1,16 @@
 package session
 
 import (
-	"github.com/hwcer/cosgo/storage/cache"
+	"github.com/hwcer/cosgo/smap"
 	"github.com/hwcer/cosgo/values"
 	"sync/atomic"
 	"time"
 )
 
-func NewSetter(id uint64, data interface{}) cache.Interface {
+func NewSetter(id uint64, data interface{}) smap.Interface {
 	d := &Setter{
 		locked: 1,
-		Setter: cache.NewSetter(id, data),
+		Setter: smap.NewSetter(id, data),
 	}
 	if Options.MaxAge > 0 {
 		d.Expire(Options.MaxAge)
@@ -21,7 +21,7 @@ func NewSetter(id uint64, data interface{}) cache.Interface {
 type Setter struct {
 	expire int64 //过期时间
 	locked int32 //SESSION锁
-	*cache.Setter
+	*smap.Setter
 }
 
 func (this *Setter) Values() values.Values {

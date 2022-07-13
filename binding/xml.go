@@ -25,3 +25,6 @@ func (xmlBinding) Bind(body io.Reader, obj interface{}) error {
 	decoder := xml.NewDecoder(body)
 	return decoder.Decode(obj)
 }
+func (xmlBinding) Unmarshal(b []byte, obj interface{}) error {
+	return xml.Unmarshal(b, obj)
+}

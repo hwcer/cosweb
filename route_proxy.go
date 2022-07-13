@@ -2,7 +2,7 @@ package cosweb
 
 import (
 	"errors"
-	"github.com/hwcer/cosgo/library/ioutil"
+	"github.com/hwcer/cosgo/ioutil"
 	"math/rand"
 	"net/http"
 	"net/url"

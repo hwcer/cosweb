@@ -6,19 +6,13 @@ replace (
 	github.com/hwcer/cosgo v0.0.0 => ../cosgo
 	github.com/hwcer/cosmo v0.0.0 => ../cosmo
 	github.com/hwcer/cosweb v0.0.0 => ./
+	github.com/hwcer/registry v0.0.0 => ../registry
 )
 
 require (
 	github.com/hwcer/cosgo v0.0.0
 	github.com/hwcer/cosmo v0.0.0
-	github.com/hwcer/registry v0.0.0-20220616055621-2083846cfa06
-)
-
-require (
-	github.com/go-stack/stack v1.8.0 // indirect
-	github.com/jinzhu/now v1.1.4 // indirect
-	go.mongodb.org/mongo-driver v1.8.3 // indirect
-	gorm.io/gorm v1.23.1 // indirect
+	github.com/hwcer/registry v0.0.0
 )
 
 require (
@@ -30,8 +24,10 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/go-redis/redis v6.15.9+incompatible
+	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.4 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/onsi/gomega v1.19.0 // indirect
@@ -46,6 +42,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/ugorji/go/codec v1.1.7
+	go.mongodb.org/mongo-driver v1.9.1 // indirect
 	golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect

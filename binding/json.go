@@ -39,6 +39,10 @@ func (jsonBinding) Bind(body io.Reader, obj interface{}) error {
 	return decodeJSON(body, obj)
 }
 
+func (jsonBinding) Unmarshal(b []byte, obj interface{}) error {
+	return json.Unmarshal(b, obj)
+}
+
 func decodeJSON(r io.Reader, obj interface{}) error {
 	decoder := json.NewDecoder(r)
 	if EnableDecoderUseNumber {

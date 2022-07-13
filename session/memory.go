@@ -1,7 +1,7 @@
 package session
 
 import (
-	"github.com/hwcer/cosgo/storage/cache"
+	"github.com/hwcer/cosgo/smap"
 	"github.com/hwcer/cosgo/values"
 	"time"
 )
@@ -10,14 +10,14 @@ var Heartbeat int32 = 10 //心跳(S)
 
 func NewMemory() *Memory {
 	s := &Memory{
-		Cache: cache.New(1024),
+		Array: smap.New(1024),
 	}
-	s.Cache.NewSetter = NewSetter
+	s.Array.NewSetter = NewSetter
 	return s
 }
 
 type Memory struct {
-	*cache.Cache
+	*smap.Array
 	stop chan struct{}
 }
 
@@ -34,11 +34,11 @@ func (this *Memory) get(key string) (*Setter, error) {
 		id  uint64
 		err error
 	)
-	if id, err = cache.Decode(key); err != nil {
+	if id, err = smap.Decode(key); err != nil {
 		return nil, err
 	}
-	var data cache.Interface
-	if data, ok = this.Cache.Get(id); !ok || data == nil {
+	var data smap.Interface
+	if data, ok = this.Array.Get(id); !ok || data == nil {
 		return nil, ErrorSessionNotExist
 	}
 	var val *Setter
@@ -105,8 +105,8 @@ func (this *Memory) Save(uuid string, data values.Values, ttl int64, unlock bool
 //Create会自动设置有效期
 //Create新数据为锁定状态
 func (this *Memory) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
-	i := this.Cache.Push(data)
-	token, err = Encode(cache.Encode(i.Id()))
+	i := this.Array.Push(data)
+	token, err = Encode(smap.Encode(i.Id()))
 	setter, _ := i.(*Setter)
 	if ttl > 0 {
 		setter.Expire(ttl)
@@ -118,11 +118,11 @@ func (this *Memory) Create(uuid string, data values.Values, ttl int64, lock bool
 }
 
 func (this *Memory) Delete(key string) error {
-	id, err := cache.Decode(key)
+	id, err := smap.Decode(key)
 	if err != nil {
 		return err
 	}
-	this.Cache.Delete(id)
+	this.Array.Delete(id)
 	return nil
 }
 
@@ -154,13 +154,13 @@ func (this *Memory) worker() {
 func (this *Memory) clean() {
 	nowTime := time.Now().Unix()
 	var remove []uint64
-	this.Cache.Range(func(item cache.Interface) bool {
+	this.Array.Range(func(item smap.Interface) bool {
 		if data, ok := item.(*Setter); ok && data.expire < nowTime {
 			remove = append(remove, item.Id())
 		}
 		return true
 	})
 	if len(remove) > 0 {
-		this.Cache.Remove(remove...)
+		this.Array.Remove(remove...)
 	}
 }

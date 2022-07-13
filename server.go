@@ -4,7 +4,7 @@ import (
 	ctx "context"
 	"crypto/tls"
 	"errors"
-	"github.com/hwcer/cosgo/library/logger"
+	"github.com/hwcer/cosgo/logger"
 	"github.com/hwcer/cosgo/utils"
 	"github.com/hwcer/cosweb/session"
 	"net/http"
@@ -24,8 +24,6 @@ type (
 		SessionDataType  RequestDataTypeMap //获取SESSION ID时默认的查询方式
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
-
-		//NewPool          func(*Context) (i interface{}, reset func(), release func())
 	}
 	Next func() error
 	// HandlerFunc defines a function to serve HTTP requests.
@@ -68,10 +66,6 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	//e.Binder = &DefaultBinder{}
 	e.pool.New = func() interface{} {
 		c := NewContext(e)
-		//if e.NewPool != nil {
-		//	c.pool = &CCPool{}
-		//	c.pool.data, c.pool.reset, c.pool.release = e.NewPool(c)
-		//}
 		return c
 	}
 	e.Router = NewRouter()

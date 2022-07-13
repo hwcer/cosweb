@@ -25,3 +25,6 @@ func (yamlBinding) Bind(body io.Reader, obj interface{}) error {
 
 	return decoder.Decode(obj)
 }
+func (yamlBinding) Unmarshal(b []byte, obj interface{}) error {
+	return yaml.Unmarshal(b, obj)
+}

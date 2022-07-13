@@ -28,6 +28,7 @@ var bindingMap = make(map[string]Binding)
 type Binding interface {
 	Name() string
 	Bind(io.Reader, interface{}) error
+	Unmarshal([]byte, interface{}) error
 }
 
 func Handle(name string) (b Binding) {

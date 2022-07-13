@@ -5,98 +5,102 @@ import (
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosweb/binding"
 	"io"
-	"mime"
-	"net/url"
+	"net/http"
 )
 
-func NewBody(c *Context) *Body {
-	return &Body{c: c}
+func NewBody() *Body {
+	return &Body{}
 }
 
 type Body struct {
-	c      *Context
-	Error  error
-	buffer *bytes.Buffer
+	err    error
+	req    *http.Request
+	bytes  []byte
 	params values.Values
 }
 
-func (b *Body) release() {
-	b.Error = nil
+func (b *Body) Reset(req *http.Request) {
+	b.req = req
+}
+func (b *Body) Release() {
+	b.err = nil
+	b.req = nil
+	b.bytes = nil
 	b.params = nil
-	b.buffer = nil
 }
 
-func (b *Body) Len() (r int) {
-	buf := b.Buffer()
-	if b.Error == nil {
-		r = buf.Len()
-	}
-	return
-}
-
-func (b *Body) ParseForm() (values.Values, error) {
-	if b.params != nil {
-		return b.params, nil
-	}
-	b.params = make(values.Values, 0)
-	d := b.Bytes()
-	query, err := url.ParseQuery(string(d))
-	if err != nil {
-		return nil, err
-	}
-	for k, _ := range query {
-		b.params.Set(k, query.Get(k))
-	}
-	return b.params, nil
-}
+//func (b *Body) Len() (r int) {
+//	v, err := b.Bytes()
+//	if err == nil {
+//		r = len(v)
+//	}
+//	return
+//}
 
 func (b *Body) Get(key string) (val interface{}, ok bool) {
-	if b.params == nil {
-		ct, _, _ := mime.ParseMediaType(b.c.Request.Header.Get(HeaderContentType))
-		if ct == binding.MIMEPOSTForm {
-			_, _ = b.ParseForm()
-		} else {
-			b.params = make(values.Values, 0)
-			_ = b.Bind(&b.params)
-		}
+	params, err := b.Values()
+	if err == nil {
+		val, ok = params[key]
 	}
-	val, ok = b.params[key]
 	return
 }
 
-func (b *Body) Read(p []byte) (n int, err error) {
-	buf := b.Buffer()
-	if b.Error != nil {
-		return 0, b.Error
-	}
-	n = copy(p, buf.Bytes())
-	return
-}
+// Read 非多线程安全
+//func (b *Body) Read(p []byte) (int, error) {
+//	v, err := b.Bytes()
+//	if err != nil {
+//		return 0, err
+//	}
+//	if len(v) <= b.off {
+//		b.off = 0
+//		return 0, io.EOF
+//	}
+//	n := copy(p, v[b.off:])
+//	b.off += n
+//	return n, nil
+//}
 
 func (b *Body) Bind(i interface{}) error {
-	ct := b.c.Request.Header.Get(HeaderContentType)
+	ct := b.req.Header.Get(HeaderContentType)
 	h := binding.Handle(ct)
 	if h == nil {
 		return ErrMimeTypeNotFound
 	}
-	if b.Len() == 0 {
+	v, err := b.Bytes()
+	if err != nil {
+		return err
+	}
+	if len(v) == 0 {
 		return nil
 	}
-	return h.Bind(b, i)
-}
-func (b *Body) Bytes() (r []byte) {
-	buf := b.Buffer()
-	if b.Error == nil {
-		r = buf.Bytes()
-	}
-	return
+	return h.Unmarshal(v, i)
 }
 
-func (b *Body) Buffer() *bytes.Buffer {
-	if b.buffer == nil {
-		b.buffer = &bytes.Buffer{}
-		reader := io.LimitReader(b.c.Request.Body, defaultMemory)
-		_, b.Error = b.buffer.ReadFrom(reader)
+func (b *Body) Bytes() ([]byte, error) {
+	if b.err != nil {
+		return nil, b.err
 	}
-	return b.buffer
+	if b.bytes == nil {
+		if b.bytes, b.err = io.ReadAll(b.req.Body); b.err == nil {
+			b.req.Body = io.NopCloser(bytes.NewReader(b.bytes))
+		} else if b.bytes == nil {
+			b.bytes = make([]byte, 0, 1)
+		}
+	}
+	return b.bytes, nil
+}
+
+func (b *Body) Reader() io.Reader {
+	d, _ := b.Bytes()
+	return bytes.NewReader(d)
+}
+
+func (b *Body) Values() (values.Values, error) {
+	if b.params == nil {
+		b.params = make(values.Values, 0)
+		if err := b.Bind(&b.params); err != nil {
+			return nil, err
+		}
+	}
+	return b.params, nil
 }

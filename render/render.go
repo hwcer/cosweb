@@ -2,27 +2,28 @@ package render
 
 import (
 	"fmt"
-	"github.com/hwcer/cosgo/library/logger"
+	"github.com/hwcer/cosgo/logger"
 	"html/template"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 )
 
-var funcs template.FuncMap
-
-func init() {
-	funcs = make(template.FuncMap)
-	funcs["unescaped"] = unescaped
-}
-func unescaped(x string) interface{} {
-	return template.URL(x)
-}
+//var funcs template.FuncMap
+//
+//func init() {
+//	funcs = make(template.FuncMap)
+//	funcs["unescaped"] = unescaped
+//}
+//func unescaped(x string) interface{} {
+//	return template.URL(x)
+//}
 
 // Render provides functions for easily writing HTML templates & JSON out to a HTTP Response.
 type Render struct {
 	Options   *Options
-	Templates *templates
+	templates map[string]*template.Template
 }
 
 // Options holds the configuration Options for a Render
@@ -53,15 +54,19 @@ func New(opts *Options) *Render {
 	}
 	if opts.Ext == "" {
 		opts.Ext = ".html"
+	} else if !strings.HasPrefix(opts.Ext, ".") {
+		opts.Ext = "." + opts.Ext
 	}
+	opts.Ext = strings.ToLower(opts.Ext)
+
 	if opts.Funcs == nil {
 		opts.Funcs = make(template.FuncMap)
 	}
-	for k, v := range funcs {
-		if _, ok := opts.Funcs[k]; !ok {
-			opts.Funcs[k] = v
-		}
-	}
+	//for k, v := range funcs {
+	//	if _, ok := opts.Funcs[k]; !ok {
+	//		opts.Funcs[k] = v
+	//	}
+	//}
 
 	if opts.Charset == "" {
 		opts.Charset = "UTF-8"
@@ -69,7 +74,7 @@ func New(opts *Options) *Render {
 
 	r := &Render{
 		Options:   opts,
-		Templates: &templates{},
+		templates: make(map[string]*template.Template),
 	}
 
 	r.compileTemplatesFromDir()
@@ -82,15 +87,20 @@ func (r *Render) Render(buf io.Writer, name string, data interface{}) error {
 	if !strings.HasSuffix(name, r.Options.Ext) {
 		name += r.Options.Ext
 	}
+	file := filepath.Join(r.Options.Templates, name)
+	tplName, err := r.tplName(file)
+	if err != nil {
+		return err
+	}
 	if r.Options.Debug {
 		r.compileTemplatesFromDir()
 	}
-	tmpl := r.Templates.Lookup(name)
+	tmpl := r.templates[tplName]
 	if tmpl == nil {
-		return fmt.Errorf("unrecognised template %s", name)
+		return fmt.Errorf("unrecognised template %s", tplName)
 	}
 	// execute template
-	err := tmpl.Execute(buf, data)
+	err = tmpl.Execute(buf, data)
 	if err != nil {
 		return err
 	}
@@ -101,21 +111,17 @@ func (r *Render) compileTemplatesFromDir() {
 	if r.Options.Templates == "" {
 		return
 	}
-
-	// replace existing templates.
-	// NOTE: this is unsafe, but Debug should really not be true in production environments.
-	templateSet := make(map[string]*template.Template)
-	//widgts, header, footer, sidebar, etc.
+	templates := make(map[string]*template.Template)
 	var err error
 	var bases []string
 	var includes []string
 	if r.Options.Includes != "" {
-		includes, err = filepath.Glob(r.Options.Includes + "/*" + r.Options.Ext)
+		includes, err = r.Glob(r.Options.Includes)
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
 	}
-	bases, err = filepath.Glob(r.Options.Templates + "/*" + r.Options.Ext)
+	bases, err = r.Glob(r.Options.Templates)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
@@ -131,14 +137,48 @@ func (r *Render) compileTemplatesFromDir() {
 	}
 
 	for _, templateFile := range bases {
-		fileName := filepath.Base(templateFile)
+		//tplName := filepath.Base(templateFile)
+		fileName, _ := r.tplName(templateFile)
 		// set template name
 		tmpl := template.Must(baseTmpl.Clone())
-		tmpl = tmpl.New(fileName)
+		tmpl = tmpl.New(filepath.Base(templateFile))
 		// parse child template
 		tmpl = template.Must(tmpl.ParseFiles(templateFile))
-		templateSet[fileName] = tmpl
+		templates[fileName] = tmpl
+	}
+	r.templates = templates
+}
+
+func (r *Render) tplName(file string) (string, error) {
+	var err error
+	file, err = filepath.Rel(r.Options.Templates, file)
+	if err != nil {
+		return "", err
+	}
+	//file = strings.ReplaceAll(file, "\\", "-")
+	//file = strings.ReplaceAll(file, "/", "-")
+	return file, nil
+}
+
+func (r *Render) Glob(root string) ([]string, error) {
+	var tpl []string
+	bases, err := filepath.Glob(root + "/*")
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range bases {
+		if s, e1 := os.Stat(f); e1 != nil {
+			return nil, e1
+		} else if s.IsDir() {
+			if fs, e2 := r.Glob(f); e2 != nil {
+				return nil, e2
+			} else {
+				tpl = append(tpl, fs...)
+			}
+		} else if strings.ToLower(filepath.Ext(f)) == r.Options.Ext {
+			tpl = append(tpl, f)
+		}
 	}
 
-	r.Templates.set = templateSet
+	return tpl, nil
 }

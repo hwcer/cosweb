@@ -25,14 +25,11 @@ type Session struct {
 	locked bool
 }
 
-func (this *Session) Start(level StartType, token ...string) (err error) {
+func (this *Session) Start(token string, level StartType) (err error) {
 	if Options.storage == nil {
 		return ErrorStorageNotSet
 	}
-	if len(token) > 0 {
-		this.token = token[0]
-	}
-
+	this.token = token
 	if level == StartTypeNone {
 		return nil
 	}
@@ -123,10 +120,6 @@ func (this *Session) Delete() (err error) {
 	}
 	this.release()
 	return
-}
-
-func (this *Session) Reset(token string) {
-	this.token = token
 }
 
 //Release 释放 session 由HTTP SERVER

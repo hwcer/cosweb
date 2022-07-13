@@ -81,10 +81,16 @@ func (r *Registry) handle(c *Context, next Next) (err error) {
 			//logger.Error("%v", err)
 		}
 	}()
+
 	if c.Request.URL.Path == "" || strings.Contains(c.Request.URL.Path, ".") {
 		return next()
 	}
-	urlPath := r.Clean(c.Request.URL.Path)
+	n := len(c.route)
+	route := make([]string, n, n)
+	copy(route, c.route)
+	route[0] = ""
+	route[n-1] = c.params["*"]
+	urlPath := r.Clean(strings.Join(route, "/"))
 	if r.prefix != "" {
 		urlPath = strings.TrimPrefix(urlPath, r.prefix)
 	}
