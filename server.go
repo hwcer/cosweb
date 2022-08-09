@@ -65,8 +65,7 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	e.HTTPErrorHandler = e.DefaultHTTPErrorHandler
 	//e.Binder = &DefaultBinder{}
 	e.pool.New = func() interface{} {
-		c := NewContext(e)
-		return c
+		return NewContext(e)
 	}
 	e.Router = NewRouter()
 	return
@@ -138,23 +137,17 @@ func (s *Server) Register(path string, handler HandlerFunc, method ...string) {
 	s.Router.Register(path, handler, method...)
 }
 
-// AcquireContext returns an empty `Ctx` instance from the pool.
+// Acquire returns an empty `Context` instance from the pool.
 // You must return the Context by calling `ReleaseContext()`.
-func (s *Server) AcquireContext(w http.ResponseWriter, r *http.Request) *Context {
+func (s *Server) Acquire(w http.ResponseWriter, r *http.Request) *Context {
 	c := s.pool.Get().(*Context)
 	c.reset(w, r)
-	if c.pool != nil && c.pool.reset != nil {
-		c.pool.reset()
-	}
 	return c
 }
 
-// ReleaseContext returns the `Ctx` instance back to the pool.
+// Release returns the `Context` instance back to the pool.
 // You must call it after `AcquireContext()`.
-func (s *Server) ReleaseContext(c *Context) {
-	if c.pool != nil && c.pool.release != nil {
-		c.pool.release()
-	}
+func (s *Server) Release(c *Context) {
 	c.release()
 	s.pool.Put(c)
 }
@@ -162,13 +155,13 @@ func (s *Server) ReleaseContext(c *Context) {
 // ServeHTTP implements `http.Handler` interface, which serves HTTP requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.scc.Add(1)
-	c := s.AcquireContext(w, r)
+	c := s.Acquire(w, r)
 	defer func() {
 		if err := recover(); err != nil {
 			s.HTTPErrorHandler(c, NewHTTPError500(err))
 		}
 		s.scc.Done()
-		s.ReleaseContext(c)
+		s.Release(c)
 	}()
 
 	if s.scc.Stopped() {

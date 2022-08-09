@@ -13,60 +13,40 @@ func NewBody() *Body {
 }
 
 type Body struct {
-	err    error
-	req    *http.Request
-	bytes  []byte
-	params values.Values
+	err     error
+	bytes   []byte
+	values  values.Values
+	request *http.Request
 }
 
-func (b *Body) Reset(req *http.Request) {
-	b.req = req
+func (this *Body) reset(req *http.Request) {
+	this.request = req
+	this.err = this.readAll(req.Body)
+	if this.err == nil {
+		req.Body = io.NopCloser(bytes.NewReader(this.bytes))
+	}
 }
-func (b *Body) Release() {
-	b.err = nil
-	b.req = nil
-	b.bytes = nil
-	b.params = nil
+func (this *Body) release() {
+	this.err = nil
+	this.values = nil
+	this.request = nil
 }
 
-//func (b *Body) Len() (r int) {
-//	v, err := b.Bytes()
-//	if err == nil {
-//		r = len(v)
-//	}
-//	return
-//}
-
-func (b *Body) Get(key string) (val interface{}, ok bool) {
-	params, err := b.Values()
+func (this *Body) Get(key string) (val interface{}, ok bool) {
+	params, err := this.Values()
 	if err == nil {
 		val, ok = params[key]
 	}
 	return
 }
 
-// Read 非多线程安全
-//func (b *Body) Read(p []byte) (int, error) {
-//	v, err := b.Bytes()
-//	if err != nil {
-//		return 0, err
-//	}
-//	if len(v) <= b.off {
-//		b.off = 0
-//		return 0, io.EOF
-//	}
-//	n := copy(p, v[b.off:])
-//	b.off += n
-//	return n, nil
-//}
-
-func (b *Body) Bind(i interface{}) error {
-	ct := b.req.Header.Get(HeaderContentType)
+func (this *Body) Bind(i interface{}) error {
+	ct := this.request.Header.Get(HeaderContentType)
 	h := binding.Handle(ct)
 	if h == nil {
 		return ErrMimeTypeNotFound
 	}
-	v, err := b.Bytes()
+	v, err := this.Bytes()
 	if err != nil {
 		return err
 	}
@@ -76,31 +56,47 @@ func (b *Body) Bind(i interface{}) error {
 	return h.Unmarshal(v, i)
 }
 
-func (b *Body) Bytes() ([]byte, error) {
-	if b.err != nil {
-		return nil, b.err
-	}
-	if b.bytes == nil {
-		if b.bytes, b.err = io.ReadAll(b.req.Body); b.err == nil {
-			b.req.Body = io.NopCloser(bytes.NewReader(b.bytes))
-		} else if b.bytes == nil {
-			b.bytes = make([]byte, 0, 1)
-		}
-	}
-	return b.bytes, nil
+func (this *Body) Bytes() ([]byte, error) {
+	return this.bytes, this.err
 }
 
-func (b *Body) Reader() io.Reader {
-	d, _ := b.Bytes()
-	return bytes.NewReader(d)
+func (this *Body) Reader() (io.Reader, error) {
+	d, err := this.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(d), nil
 }
 
-func (b *Body) Values() (values.Values, error) {
-	if b.params == nil {
-		b.params = make(values.Values, 0)
-		if err := b.Bind(&b.params); err != nil {
+func (this *Body) Values() (values.Values, error) {
+	if this.values == nil {
+		this.values = make(values.Values, 0)
+		if err := this.Bind(&this.values); err != nil {
 			return nil, err
 		}
 	}
-	return b.params, nil
+	return this.values, nil
+}
+
+func (this *Body) readAll(r io.Reader) error {
+	b := this.bytes
+	if b == nil {
+		b = make([]byte, 0, 512)
+	}
+	var c int
+	for {
+		if c == cap(b) {
+			b = append(b, 0)[:c]
+		}
+		n, err := r.Read(b[c:cap(b)])
+		c += n
+		b = b[:c]
+		if err != nil {
+			this.bytes = b
+			if err == io.EOF {
+				err = nil
+			}
+			return err
+		}
+	}
 }

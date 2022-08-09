@@ -15,15 +15,8 @@ const (
 	defaultMemory = 10 << 20 // 10 MB
 )
 
-type CCPool struct {
-	data    interface{}
-	reset   func()
-	release func()
-}
-
 //Context API上下文.
 type Context struct {
-	pool     *CCPool //缓存逻辑层对象
 	query    url.Values
 	route    []string
 	params   map[string]string
@@ -50,7 +43,7 @@ func NewContext(s *Server) *Context {
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Request = r
 	c.Response = w
-	c.Body.Reset(r)
+	c.Body.reset(r)
 }
 
 //释放资源,准备进入缓存池
@@ -61,7 +54,7 @@ func (c *Context) release() {
 	c.aborted = 0
 	c.Request = nil
 	c.Response = nil
-	c.Body.Release()
+	c.Body.release()
 	c.Cookie.release()
 	c.Session.Release()
 }
@@ -110,14 +103,6 @@ func (c *Context) doMiddleware(middleware []MiddlewareFunc) (error, bool) {
 
 func (c *Context) Abort() {
 	c.aborted += 1
-}
-
-//Pool 获取缓存池中缓存的对象
-func (c *Context) Pool() (i interface{}) {
-	if c.pool != nil {
-		i = c.pool.data
-	}
-	return
 }
 
 //Route 当期匹配的路由
