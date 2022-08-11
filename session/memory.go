@@ -10,14 +10,14 @@ var Heartbeat int32 = 10 //心跳(S)
 
 func NewMemory() *Memory {
 	s := &Memory{
-		Array: smap.New(1024),
+		Hash: *smap.NewHash(1024),
 	}
 	s.Array.NewSetter = NewSetter
 	return s
 }
 
 type Memory struct {
-	*smap.Array
+	smap.Hash
 	stop chan struct{}
 }
 
@@ -28,70 +28,57 @@ func (this *Memory) Start() error {
 	}
 	return nil
 }
-func (this *Memory) get(key string) (*Setter, error) {
-	var (
-		ok  bool
-		id  uint64
-		err error
-	)
-	if id, err = smap.Decode(key); err != nil {
-		return nil, err
+
+func (this *Memory) get(token string) (*Setter, error) {
+	mid := smap.MID(token)
+	if v, ok := this.Hash.Array.Get(mid); !ok {
+		return nil, ErrorSessionIllegal
+	} else {
+		data, _ := v.(*Setter)
+		return data, nil
 	}
-	var data smap.Interface
-	if data, ok = this.Array.Get(id); !ok || data == nil {
-		return nil, ErrorSessionNotExist
-	}
-	var val *Setter
-	if val, ok = data.(*Setter); !ok {
-		return nil, ErrorSessionTypeError
-	}
-	if val.expire > 0 && val.expire < time.Now().Unix() {
-		return nil, ErrorSessionTypeExpire
-	}
-	return val, nil
 }
 
 func (this *Memory) Get(token string, lock bool) (uuid string, result values.Values, err error) {
-	var ok bool
 	var data *Setter
-	if uuid, err = Decode(token); err != nil {
-		return
-	}
-	if data, err = this.get(uuid); err != nil {
+	data, err = this.get(token)
+	if err != nil {
 		return
 	}
 	if lock && !data.Lock() {
-		return "", nil, ErrorSessionLocked
+		err = ErrorSessionLocked
+		return
 	}
-
-	var val values.Values
-	if val, ok = data.Get().(values.Values); !ok {
-		return "", nil, ErrorSessionTypeError
-	}
-	result = make(values.Values, len(val))
-	for k, v := range val {
+	uuid = data.uuid
+	vs, _ := data.Get().(values.Values)
+	result = make(values.Values)
+	for k, v := range vs {
 		result.Set(k, v)
 	}
 	return
 }
 
-func (this *Memory) Save(uuid string, data values.Values, ttl int64, unlock bool) (err error) {
+func (this *Memory) Save(token string, data values.Values, ttl int64, unlock bool) (err error) {
 	var setter *Setter
-	if setter, err = this.get(uuid); err != nil {
-		return err
+	setter, err = this.get(token)
+	if err != nil {
+		return
 	}
-	value := setter.Values()
-	if value == nil {
+
+	vs, _ := setter.Get().(values.Values)
+	if vs == nil {
 		return ErrorSessionTypeError
 	}
 
-	for k, v := range value {
-		if !data.Has(k) {
-			data.Set(k, v)
-		}
+	newData := make(values.Values)
+	for k, v := range vs {
+		newData.Set(k, v)
 	}
+	for k, v := range data {
+		newData.Set(k, v)
+	}
+	setter.Set(newData)
 
-	setter.Set(data)
 	if ttl > 0 {
 		setter.Expire(ttl)
 	}
@@ -100,30 +87,25 @@ func (this *Memory) Save(uuid string, data values.Values, ttl int64, unlock bool
 	}
 	return
 }
+func (this *Memory) Delete(uuid string) error {
+	this.Hash.Delete(uuid)
+	return nil
+}
 
 //Create 创建新SESSION,返回SESSION Index
 //Create会自动设置有效期
 //Create新数据为锁定状态
 func (this *Memory) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
-	i := this.Array.Push(data)
-	token, err = Encode(smap.Encode(i.Id()))
-	setter, _ := i.(*Setter)
+	d := this.Hash.Create(uuid, data)
+	setter, _ := d.(*Setter)
+	token = string(setter.Id())
 	if ttl > 0 {
 		setter.Expire(ttl)
 	}
-	if lock {
-		setter.Lock()
+	if !lock {
+		setter.UnLock() //默认加锁
 	}
 	return
-}
-
-func (this *Memory) Delete(key string) error {
-	id, err := smap.Decode(key)
-	if err != nil {
-		return err
-	}
-	this.Array.Delete(id)
-	return nil
 }
 
 func (this *Memory) Close() error {
@@ -153,14 +135,15 @@ func (this *Memory) worker() {
 
 func (this *Memory) clean() {
 	nowTime := time.Now().Unix()
-	var remove []uint64
-	this.Array.Range(func(item smap.Interface) bool {
+	var keys []string
+	this.Hash.Array.Range(func(item smap.Setter) bool {
 		if data, ok := item.(*Setter); ok && data.expire < nowTime {
-			remove = append(remove, item.Id())
+			keys = append(keys, data.uuid)
 		}
 		return true
 	})
-	if len(remove) > 0 {
-		this.Array.Remove(remove...)
+
+	if len(keys) > 0 {
+		this.Hash.Remove(keys...)
 	}
 }

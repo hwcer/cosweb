@@ -2,15 +2,14 @@ package session
 
 import (
 	"github.com/hwcer/cosgo/smap"
-	"github.com/hwcer/cosgo/values"
 	"sync/atomic"
 	"time"
 )
 
-func NewSetter(id uint64, data interface{}) smap.Interface {
+func NewSetter(id smap.MID, data interface{}) smap.Setter {
 	d := &Setter{
+		Data:   *smap.NewData(id, data),
 		locked: 1,
-		Setter: smap.NewSetter(id, data),
 	}
 	if Options.MaxAge > 0 {
 		d.Expire(Options.MaxAge)
@@ -19,18 +18,10 @@ func NewSetter(id uint64, data interface{}) smap.Interface {
 }
 
 type Setter struct {
-	expire int64 //过期时间
-	locked int32 //SESSION锁
-	*smap.Setter
-}
-
-func (this *Setter) Values() values.Values {
-	v := this.Setter.Get()
-	if v == nil {
-		return nil
-	}
-	r, _ := v.(values.Values)
-	return r
+	smap.Data //数据接口
+	uuid      string
+	expire    int64 //过期时间
+	locked    int32 //SESSION锁
 }
 
 func (this *Setter) Lock() bool {

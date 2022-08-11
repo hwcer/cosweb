@@ -127,7 +127,11 @@ func (this *Redis) Create(uuid string, data values.Values, ttl int64, lock bool)
 	return
 
 }
-func (this *Redis) Save(uuid string, data values.Values, ttl int64, unlock bool) (err error) {
+func (this *Redis) Save(token string, data values.Values, ttl int64, unlock bool) (err error) {
+	var uuid string
+	if uuid, err = Decode(token); err != nil {
+		return
+	}
 	rkey := this.rkey(uuid)
 	//pipeline := this.client.Pipeline()
 	if unlock {
