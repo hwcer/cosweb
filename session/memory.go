@@ -98,6 +98,7 @@ func (this *Memory) Delete(uuid string) error {
 func (this *Memory) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
 	d := this.Hash.Create(uuid, data)
 	setter, _ := d.(*Setter)
+	setter.uuid = uuid
 	token = string(setter.Id())
 	if ttl > 0 {
 		setter.Expire(ttl)
