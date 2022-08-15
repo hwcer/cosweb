@@ -15,13 +15,13 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		scc              *utils.SCC
-		pool             sync.Pool
-		middleware       []MiddlewareFunc //中间件
-		Render           Render
-		Server           *http.Server
-		Router           *Router
-		SessionDataType  RequestDataTypeMap //获取SESSION ID时默认的查询方式
+		scc        *utils.SCC
+		pool       sync.Pool
+		middleware []MiddlewareFunc //中间件
+		Render     Render
+		Server     *http.Server
+		Router     *Router
+		//SessionDataType  RequestDataTypeMap //获取SESSION ID时默认的查询方式
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
 	}
@@ -60,7 +60,7 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 		e.Server.TLSConfig = tlsConfig[0]
 	}
 	e.Server.Handler = e
-	e.SessionDataType = defaultSessionDataType
+	//e.SessionDataType = defaultSessionDataType
 	e.RequestDataType = defaultRequestDataType
 	e.HTTPErrorHandler = e.DefaultHTTPErrorHandler
 	//e.Binder = &DefaultBinder{}
@@ -104,7 +104,7 @@ func (s *Server) POST(path string, h HandlerFunc) {
 	s.Register(path, h, http.MethodPost)
 }
 
-//代理服务器
+// 代理服务器
 func (s *Server) Proxy(prefix, address string, method ...string) *Proxy {
 	proxy := NewProxy(address)
 	proxy.Route(s, prefix, method...)
@@ -120,7 +120,7 @@ func (s *Server) Static(prefix, root string, method ...string) *Static {
 	return static
 }
 
-//Registry 使用Registry 批量注册struct
+// Registry 使用Registry 批量注册struct
 func (s *Server) Registry(prefix string, method ...string) (r *Registry) {
 	r = NewRegistry(prefix, nil)
 	r.Handle(s, method...)
@@ -211,7 +211,7 @@ func (s *Server) Start(address string) (err error) {
 	return nil
 }
 
-//立即关闭
+// 立即关闭
 func (s *Server) Close() error {
 	s.scc.Done()
 	if s.scc.Cancel() {
@@ -224,7 +224,7 @@ func (s *Server) Close() error {
 	return err
 }
 
-//优雅关闭，等所有协程结束
+// 优雅关闭，等所有协程结束
 func (s *Server) Shutdown(ctx ctx.Context) error {
 	err := s.Server.Shutdown(ctx)
 	if err == nil {

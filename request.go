@@ -9,18 +9,17 @@ type RequestDataType int
 type RequestDataTypeMap []RequestDataType
 
 const (
-	RequestDataTypeParam RequestDataType = iota //params
-	//RequestDataTypeForm                          //POST FORM
-	RequestDataTypeBody   //POST json, xml,pb....
-	RequestDataTypeQuery  //GET
-	RequestDataTypeCookie //COOKIES
-	RequestDataTypeHeader //HEADER
+	RequestDataTypeParam  RequestDataType = iota //params
+	RequestDataTypeBody                          //POST json, xml,pb,form....
+	RequestDataTypeQuery                         //GET
+	RequestDataTypeCookie                        //COOKIES
+	RequestDataTypeHeader                        //HEADER
 )
 
-//默认session id获取方式
-var defaultSessionDataType = RequestDataTypeMap{RequestDataTypeQuery, RequestDataTypeCookie, RequestDataTypeHeader}
+// 默认session id获取方式
+//var defaultSessionDataType = RequestDataTypeMap{RequestDataTypeQuery, RequestDataTypeCookie, RequestDataTypeHeader}
 
-//默认获取数据的顺序
+// 默认获取数据的顺序
 var defaultRequestDataType = RequestDataTypeMap{RequestDataTypeParam, RequestDataTypeQuery, RequestDataTypeBody, RequestDataTypeCookie}
 
 func (r RequestDataTypeMap) IndexOf(v RequestDataType) int {

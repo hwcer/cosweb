@@ -8,12 +8,24 @@ import (
 	"strings"
 )
 
-// 通过registry集中注册对象
+// registry 通过registry集中注册对象
+type registryInterface interface {
+	Caller(c *Context, fn reflect.Value) interface{}
+}
 
 type RegistryCaller func(c *Context, pr reflect.Value, fn reflect.Value) (interface{}, error)
 type RegistrySerialize func(ctx *Context, reply interface{}) error
-type RegistryInterface interface {
-	Caller(c *Context, fn reflect.Value) interface{}
+
+//type RegistryMiddleware func(*Context, Next) error
+
+type registryCallerHandle interface {
+	Caller(c *Context, pr reflect.Value, fn reflect.Value) (interface{}, error)
+}
+type registrySerializeHandle interface {
+	Serialize(ctx *Context, reply interface{}) error
+}
+type registryMiddlewareHandle interface {
+	Middleware(*Context, Next) error
 }
 
 type RegistryHandler struct {
@@ -32,9 +44,20 @@ func (this *RegistryHandler) Use(src interface{}) {
 	if v, ok := src.(MiddlewareFunc); ok {
 		this.Middleware = append(this.Middleware, v)
 	}
+
+	if v, ok := src.(registryCallerHandle); ok {
+		this.Caller = v.Caller
+	}
+	if v, ok := src.(registrySerializeHandle); ok {
+		this.Serialize = v.Serialize
+	}
+	if v, ok := src.(registryMiddlewareHandle); ok {
+		this.Middleware = append(this.Middleware, v.Middleware)
+	}
+
 }
 
-//NewRegistry 创建新的路由组
+// NewRegistry 创建新的路由组
 // prefix路由前缀
 func NewRegistry(prefix string, opts *registry.Options) *Registry {
 	r := &Registry{}
@@ -73,7 +96,7 @@ func (r *Registry) filter(s *registry.Service, pr, fn reflect.Value) bool {
 	return true
 }
 
-//handle cosweb入口
+// handle cosweb入口
 func (r *Registry) handle(c *Context, next Next) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -135,7 +158,7 @@ func (r *Registry) caller(c *Context, pr, fn reflect.Value) (reply interface{}, 
 	if !pr.IsValid() {
 		f, _ := fn.Interface().(func(c *Context) interface{})
 		reply = f(c)
-	} else if s, ok := pr.Interface().(RegistryInterface); ok {
+	} else if s, ok := pr.Interface().(registryInterface); ok {
 		reply = s.Caller(c, fn)
 	} else {
 		ret := fn.Call([]reflect.Value{pr, reflect.ValueOf(c)})
@@ -144,19 +167,23 @@ func (r *Registry) caller(c *Context, pr, fn reflect.Value) (reply interface{}, 
 	return
 }
 
-func (r *Registry) Service(name string, middleware ...interface{}) *registry.Service {
-	service := r.Registry.Service(name)
-	if len(middleware) > 0 {
-		handler := &RegistryHandler{}
-		for _, m := range middleware {
-			handler.Use(m)
-		}
+func (r *Registry) Service(name string, middleware ...interface{}) (service *registry.Service) {
+	service = r.Registry.Service(name)
+	if len(middleware) == 0 {
+		return
+	}
+	handler, ok := r.handler[service.Name()]
+	if !ok {
+		handler = &RegistryHandler{}
 		r.handler[service.Name()] = handler
 	}
-	return service
+	for _, m := range middleware {
+		handler.Use(m)
+	}
+	return
 }
 
-//Handle 注册服务器
+// Handle 注册服务器
 func (r *Registry) Handle(s *Server, method ...string) {
 	for _, service := range r.Registry.Services() {
 		route := path.Join(r.prefix, service.Name(), "*")
