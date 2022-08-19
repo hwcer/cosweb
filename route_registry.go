@@ -117,6 +117,7 @@ func (r *Registry) handle(c *Context, next Next) (err error) {
 	if r.prefix != "" {
 		urlPath = strings.TrimPrefix(urlPath, r.prefix)
 	}
+
 	service, ok := r.Match(urlPath)
 	if !ok {
 		return next()
