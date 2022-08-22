@@ -4,22 +4,20 @@ import (
 	"fmt"
 	"github.com/hwcer/registry"
 	"path"
-	"reflect"
 	"strings"
 )
 
 // registry 通过registry集中注册对象
 type registryInterface interface {
-	Caller(c *Context, fn reflect.Value) interface{}
+	Caller(c *Context, node *registry.Node) interface{}
 }
-
-type RegistryCaller func(c *Context, pr reflect.Value, fn reflect.Value) (interface{}, error)
+type RegistryCaller func(c *Context, node *registry.Node) (interface{}, error)
 type RegistrySerialize func(ctx *Context, reply interface{}) error
 
 //type RegistryMiddleware func(*Context, Next) error
 
 type registryCallerHandle interface {
-	Caller(c *Context, pr reflect.Value, fn reflect.Value) (interface{}, error)
+	Caller(c *Context, node *registry.Node) (interface{}, error)
 }
 type registrySerializeHandle interface {
 	Serialize(ctx *Context, reply interface{}) error
@@ -81,11 +79,12 @@ type Registry struct {
 	Serialize RegistrySerialize //消息序列化封装
 }
 
-func (r *Registry) filter(s *registry.Service, pr, fn reflect.Value) bool {
-	if !pr.IsValid() {
-		_, ok := fn.Interface().(func(*Context) interface{})
+func (r *Registry) filter(s *registry.Service, node *registry.Node) bool {
+	if node.IsFunc() {
+		_, ok := node.Method().(func(*Context) interface{})
 		return ok
 	}
+	fn := node.Value()
 	t := fn.Type()
 	if t.NumIn() != 2 {
 		return false
@@ -122,7 +121,7 @@ func (r *Registry) handle(c *Context, next Next) (err error) {
 	if !ok {
 		return next()
 	}
-	pr, fn, ok := service.Match(urlPath)
+	node, ok := service.Match(urlPath)
 	if !ok {
 		return next()
 	}
@@ -136,11 +135,11 @@ func (r *Registry) handle(c *Context, next Next) (err error) {
 
 	var reply interface{}
 	if handler != nil && handler.Caller != nil {
-		reply, err = handler.Caller(c, pr, fn)
+		reply, err = handler.Caller(c, node)
 	} else if r.Caller != nil {
-		reply, err = r.Caller(c, pr, fn)
+		reply, err = r.Caller(c, node)
 	} else {
-		reply, err = r.caller(c, pr, fn)
+		reply, err = r.caller(c, node)
 	}
 	if err != nil {
 		return
@@ -155,14 +154,14 @@ func (r *Registry) handle(c *Context, next Next) (err error) {
 	}
 }
 
-func (r *Registry) caller(c *Context, pr, fn reflect.Value) (reply interface{}, err error) {
-	if !pr.IsValid() {
-		f, _ := fn.Interface().(func(c *Context) interface{})
+func (r *Registry) caller(c *Context, node *registry.Node) (reply interface{}, err error) {
+	if node.IsFunc() {
+		f, _ := node.Method().(func(c *Context) interface{})
 		reply = f(c)
-	} else if s, ok := pr.Interface().(registryInterface); ok {
-		reply = s.Caller(c, fn)
+	} else if s, ok := node.Binder().(registryInterface); ok {
+		reply = s.Caller(c, node)
 	} else {
-		ret := fn.Call([]reflect.Value{pr, reflect.ValueOf(c)})
+		ret := node.Call(c)
 		reply = ret[0].Interface()
 	}
 	return
