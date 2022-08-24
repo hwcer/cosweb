@@ -1,7 +1,8 @@
 package session
 
 import (
-	"github.com/go-redis/redis"
+	"context"
+	"github.com/go-redis/redis/v8"
 	"github.com/hwcer/cosgo/utils"
 	"github.com/hwcer/cosgo/values"
 	"net/url"
@@ -54,7 +55,7 @@ func (this *Redis) Start() (err error) {
 	}
 
 	this.client = redis.NewClient(opts)
-	_, err = this.client.Ping().Result()
+	_, err = this.client.Ping(context.Background()).Result()
 	if err != nil {
 		return err
 	}
@@ -75,20 +76,20 @@ func (this *Redis) lock(rkey string, data values.Values) bool {
 			return false
 		}
 	}
-	if v, err := this.client.HIncrBy(rkey, redisSessionKeyLock, 1).Result(); err != nil || v > 1 {
+	if v, err := this.client.HIncrBy(context.Background(), rkey, redisSessionKeyLock, 1).Result(); err != nil || v > 1 {
 		return false
 	}
 	return true
 }
 
-//Get 获取session镜像数据
+// Get 获取session镜像数据
 func (this *Redis) Get(token string, lock bool) (uuid string, data values.Values, err error) {
 	if uuid, err = Decode(token); err != nil {
 		return
 	}
 	var val map[string]string
 	rkey := this.rkey(uuid)
-	if val, err = this.client.HGetAll(rkey).Result(); err != nil {
+	if val, err = this.client.HGetAll(context.Background(), rkey).Result(); err != nil {
 		return
 	}
 	if v, ok := val[redisSessionKeyUid]; !ok {
@@ -108,7 +109,7 @@ func (this *Redis) Get(token string, lock bool) (uuid string, data values.Values
 	return
 }
 
-//Create ttl过期时间(s)
+// Create ttl过期时间(s)
 func (this *Redis) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
 	rkey := this.rkey(uuid)
 	if lock {
@@ -117,11 +118,11 @@ func (this *Redis) Create(uuid string, data values.Values, ttl int64, lock bool)
 		data.Set(redisSessionKeyLock, 0)
 	}
 	data[redisSessionKeyUid] = uuid
-	if err = this.client.HMSet(rkey, data).Err(); err != nil {
+	if err = this.client.HMSet(context.Background(), rkey, data).Err(); err != nil {
 		return
 	}
 	if ttl > 0 {
-		this.client.Expire(rkey, time.Duration(ttl)*time.Second)
+		this.client.Expire(context.Background(), rkey, time.Duration(ttl)*time.Second)
 	}
 	token, err = Encode(uuid)
 	return
@@ -139,12 +140,12 @@ func (this *Redis) Save(token string, data values.Values, ttl int64, unlock bool
 	}
 
 	if len(data) > 0 {
-		if _, err = this.client.HMSet(rkey, data).Result(); err != nil {
+		if _, err = this.client.HMSet(context.Background(), rkey, data).Result(); err != nil {
 			return
 		}
 	}
 	if ttl > 0 {
-		this.client.Expire(rkey, time.Duration(ttl)*time.Second)
+		this.client.Expire(context.Background(), rkey, time.Duration(ttl)*time.Second)
 	}
 
 	return
@@ -152,6 +153,6 @@ func (this *Redis) Save(token string, data values.Values, ttl int64, unlock bool
 
 func (this *Redis) Delete(uuid string) (err error) {
 	rkey := this.rkey(uuid)
-	_, err = this.client.Del(rkey).Result()
+	_, err = this.client.Del(context.Background(), rkey).Result()
 	return
 }
