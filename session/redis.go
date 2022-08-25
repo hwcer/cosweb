@@ -118,7 +118,12 @@ func (this *Redis) Create(uuid string, data values.Values, ttl int64, lock bool)
 		data.Set(redisSessionKeyLock, 0)
 	}
 	data[redisSessionKeyUid] = uuid
-	if err = this.client.HMSet(context.Background(), rkey, data).Err(); err != nil {
+	args := make([]interface{}, len(data))
+	for k, v := range data {
+		args = append(args, k, v)
+	}
+
+	if err = this.client.HMSet(context.Background(), rkey, args...).Err(); err != nil {
 		return
 	}
 	if ttl > 0 {
