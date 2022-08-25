@@ -118,7 +118,7 @@ func (this *Redis) Create(uuid string, data values.Values, ttl int64, lock bool)
 		data.Set(redisSessionKeyLock, 0)
 	}
 	data[redisSessionKeyUid] = uuid
-	args := make([]interface{}, len(data))
+	args := make([]interface{}, 0, len(data)*2)
 	for k, v := range data {
 		args = append(args, k, v)
 	}
@@ -145,7 +145,11 @@ func (this *Redis) Save(token string, data values.Values, ttl int64, unlock bool
 	}
 
 	if len(data) > 0 {
-		if _, err = this.client.HMSet(context.Background(), rkey, data).Result(); err != nil {
+		args := make([]interface{}, 0, len(data)*2)
+		for k, v := range data {
+			args = append(args, k, v)
+		}
+		if _, err = this.client.HMSet(context.Background(), rkey, args...).Result(); err != nil {
 			return
 		}
 	}
