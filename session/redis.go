@@ -2,11 +2,9 @@ package session
 
 import (
 	"context"
-	"github.com/go-redis/redis/v8"
-	"github.com/hwcer/cosgo/utils"
+	"errors"
+	"github.com/hwcer/cosgo/redis"
 	"github.com/hwcer/cosgo/values"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -17,52 +15,38 @@ const redisSessionKeyLock = "_sess_lock"
 type Redis struct {
 	prefix  []string
 	client  *redis.Client
-	address *url.URL
+	address string
 }
 
-func NewRedis(address string, prefix ...string) (*Redis, error) {
-	uri, _ := utils.NewUrl(address, "tcp")
-	c := &Redis{
-		prefix:  prefix,
-		address: uri,
+func NewRedis(address interface{}, prefix ...string) (c *Redis, err error) {
+	c = &Redis{
+		prefix: prefix,
 	}
-	if len(c.prefix) == 0 {
-		c.prefix = append(c.prefix, "-cookie")
+	c.prefix = append(c.prefix, "cookie")
+
+	switch v := address.(type) {
+	case *redis.Client:
+		c.client = v
+	case string:
+		c.address = v
+	default:
+		err = errors.New("address type must be string or *github.com/hwcer/cosgo/redis.Client")
 	}
-	return c, nil
+	return
 }
 
 func (this *Redis) Start() (err error) {
-	//rdb := redis.NewFailoverClient(&redis.FailoverOptions{
-	//	MasterName:    "master",
-	//	SentinelAddrs: []string{"x.x.x.x:26379", "xx.xx.xx.xx:26379", "xxx.xxx.xxx.xxx:26379"},
-	//})
-	//
-	//rdb := redis.NewClusterClient(&redis.ClusterOptions{
-	//	Addrs: []string{":7000", ":7001", ":7002", ":7003", ":7004", ":7005"},
-	//})
-
-	opts := &redis.Options{
-		Addr:    this.address.Host,
-		Network: this.address.Scheme,
+	if this.client != nil {
+		return
 	}
-	query := this.address.Query()
-	opts.Password = query.Get("password")
-	if db := query.Get("db"); db != "" {
-		if opts.DB, err = strconv.Atoi(db); err != nil {
-			return err
-		}
-	}
-
-	this.client = redis.NewClient(opts)
-	_, err = this.client.Ping(context.Background()).Result()
-	if err != nil {
-		return err
-	}
-	return nil
+	this.client, err = redis.New(this.address)
+	return
 }
 
 func (this *Redis) Close() error {
+	if this.address == "" {
+		return nil
+	}
 	return this.client.Close()
 }
 

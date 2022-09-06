@@ -7,8 +7,14 @@ import (
 
 const ContextRandomStringLength = 4
 
+type token interface {
+	Decode(sid string) (uid string, err error)
+	Encode(uid string) (sid string, err error)
+}
+
 var Options = struct {
 	Name    string //session cookie name
+	Token   token  //token生成和解析方式
 	MaxAge  int64  //有效期(S)
 	Secret  string //16位秘钥
 	storage Storage
@@ -19,6 +25,9 @@ var Options = struct {
 }
 
 func Decode(sid string) (uid string, err error) {
+	if Options.Token != nil {
+		return Options.Token.Decode(sid)
+	}
 	str, err := utils.Crypto.AESDecrypt(sid, Options.Secret)
 	if err != nil {
 		return "", err
@@ -28,6 +37,9 @@ func Decode(sid string) (uid string, err error) {
 }
 
 func Encode(uid string) (sid string, err error) {
+	if Options.Token != nil {
+		return Options.Token.Encode(uid)
+	}
 	var arr []string
 	arr = append(arr, utils.Random.String(ContextRandomStringLength))
 	arr = append(arr, uid)
