@@ -107,12 +107,7 @@ func (r *Registry) handle(c *Context, next Next) (err error) {
 	if c.Request.URL.Path == "" || strings.Contains(c.Request.URL.Path, ".") {
 		return next()
 	}
-	n := len(c.route)
-	route := make([]string, n, n)
-	copy(route, c.route)
-	route[0] = ""
-	route[n-1] = c.params["*"]
-	urlPath := r.Clean(strings.Join(route, "/"))
+	urlPath := r.Clean(strings.Join(c.route[1:], "/"))
 	if r.prefix != "" {
 		urlPath = strings.TrimPrefix(urlPath, r.prefix)
 	}
@@ -186,7 +181,9 @@ func (r *Registry) Service(name string, middleware ...interface{}) (service *reg
 // Handle 注册服务器
 func (r *Registry) Handle(s *Server, method ...string) {
 	for _, service := range r.Registry.Services() {
-		route := path.Join(r.prefix, service.Name(), "*")
-		s.Register(route, r.handle, method...)
+		for _, v := range service.Paths() {
+			route := path.Join(r.prefix, service.Name(), v)
+			s.Register(route, r.handle, method...)
+		}
 	}
 }
