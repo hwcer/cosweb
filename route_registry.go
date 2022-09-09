@@ -12,7 +12,7 @@ type registryInterface interface {
 	Caller(c *Context, node *registry.Node) interface{}
 }
 type RegistryCaller func(c *Context, node *registry.Node) (interface{}, error)
-type RegistrySerialize func(ctx *Context, reply interface{}) error
+type RegistrySerialize func(c *Context, reply interface{}) error
 
 //type RegistryMiddleware func(*Context, Next) error
 
