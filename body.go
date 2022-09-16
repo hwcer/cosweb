@@ -2,8 +2,8 @@ package cosweb
 
 import (
 	"bytes"
+	"github.com/hwcer/cosgo/binding"
 	"github.com/hwcer/cosgo/values"
-	"github.com/hwcer/cosweb/binding"
 	"io"
 	"net/http"
 )

@@ -7,6 +7,7 @@ import (
 	"github.com/hwcer/cosgo/utils"
 	"github.com/hwcer/cosweb/session"
 	"github.com/hwcer/logger"
+	"github.com/hwcer/registry"
 	"net/http"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type (
 		Render     Render
 		Server     *http.Server
 		Router     *Router
+		Registry   *registry.Registry
 		//SessionDataType  RequestDataTypeMap //获取SESSION ID时默认的查询方式
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
@@ -51,9 +53,10 @@ var (
 // Push creates an instance of Server.
 func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	e = &Server{
-		scc:    utils.NewSCC(nil),
-		pool:   sync.Pool{},
-		Server: new(http.Server),
+		scc:      utils.NewSCC(nil),
+		pool:     sync.Pool{},
+		Server:   new(http.Server),
+		Registry: registry.New(nil),
 		//ContentType: ContentTypeApplicationJSON,
 	}
 	if len(tlsConfig) > 0 {
@@ -120,11 +123,22 @@ func (s *Server) Static(prefix, root string, method ...string) *Static {
 	return static
 }
 
-// Registry 使用Registry 批量注册struct
-func (s *Server) Registry(prefix string, method ...string) (r *Registry) {
-	r = NewRegistry(prefix, nil)
-	r.Handle(s, method...)
-	return
+// Service 使用Registry的Service批量注册struct
+func (this *Server) Service(name string, handler ...interface{}) *registry.Service {
+	service := this.Registry.Service(name)
+	if service.Handler == nil {
+		h := &Handler{}
+		service.Handler = h
+		service.On(registry.FilterEventTypeFunc, h.Filter)
+		service.On(registry.FilterEventTypeMethod, h.Filter)
+		service.On(registry.FilterEventTypeStruct, h.Filter)
+	}
+	if h, ok := service.Handler.(*Handler); ok {
+		for _, i := range handler {
+			h.Use(i)
+		}
+	}
+	return service
 }
 
 // AddTarget registers a new Register for an HTTP value and path with matching handler
@@ -184,21 +198,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.HTTPErrorHandler(c, ErrNotFound) //所有备选路由都放弃执行
 	}
 }
-func (s *Server) Run(address string) error {
-	s.scc.Add(1)
-	s.Server.Addr = address
-	if s.Server.TLSConfig != nil {
-		return s.Server.ListenAndServeTLS("", "")
-	} else {
-		return s.Server.ListenAndServe()
-	}
-}
 
 // Start starts an HTTP server.
 func (s *Server) Start(address string) (err error) {
 	s.scc.Add(1)
 	s.Server.Addr = address
-	err = utils.Timeout(time.Second*1, func() error {
+	//注册所有 service
+	for _, service := range s.Registry.Services() {
+		if handler, ok := service.Handler.(*Handler); ok {
+			servicePath := service.Name()
+			for _, serviceMethod := range service.Paths() {
+				path := service.Clean(servicePath, serviceMethod)
+				s.Register(path, handler.handle, handler.method...)
+			}
+		}
+	}
+	//启动服务
+	err = utils.Timeout(time.Second, func() error {
 		if s.Server.TLSConfig != nil {
 			return s.Server.ListenAndServeTLS("", "")
 		} else {
@@ -211,7 +227,7 @@ func (s *Server) Start(address string) (err error) {
 	return nil
 }
 
-// 立即关闭
+// Close 立即关闭
 func (s *Server) Close() error {
 	s.scc.Done()
 	if s.scc.Cancel() {
@@ -224,7 +240,7 @@ func (s *Server) Close() error {
 	return err
 }
 
-// 优雅关闭，等所有协程结束
+// Shutdown 优雅关闭，等所有协程结束
 func (s *Server) Shutdown(ctx ctx.Context) error {
 	err := s.Server.Shutdown(ctx)
 	if err == nil {

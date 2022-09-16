@@ -2,7 +2,7 @@ package cosweb
 
 import (
 	"errors"
-	"github.com/hwcer/cosgo/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -68,7 +68,7 @@ func (this *Proxy) handle(c *Context, next Next) (err error) {
 
 	defer resp.Body.Close()
 	var body []byte
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}

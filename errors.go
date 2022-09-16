@@ -33,6 +33,7 @@ var (
 	ErrInvalidCertOrKeyType        = errors.New("invalid cert or key type, must be string or []byte")
 	ErrArgsNotFound                = errors.New("args not found")
 	ErrMimeTypeNotFound            = errors.New("mime type not found")
+	ErrHandlerError                = errors.New("handler type error")
 )
 
 // Error makes it compatible with `error` interface.

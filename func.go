@@ -2,16 +2,16 @@ package cosweb
 
 import (
 	"crypto/tls"
-	"github.com/hwcer/cosgo/ioutil"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
+	"os"
 	"unicode"
 	"unicode/utf8"
 )
 
 func isExported(name string) bool {
-	rune, _ := utf8.DecodeRuneInString(name)
-	return unicode.IsUpper(rune)
+	v, _ := utf8.DecodeRuneInString(name)
+	return unicode.IsUpper(v)
 }
 
 func strFirstToLower(str string) string {
@@ -55,7 +55,7 @@ func TLSConfigAutocert() (c *tls.Config, err error) {
 func filepathOrContent(fileOrContent interface{}) (content []byte, err error) {
 	switch v := fileOrContent.(type) {
 	case string:
-		return ioutil.ReadFile(v)
+		return os.ReadFile(v)
 	case []byte:
 		return v, nil
 	default:
@@ -63,7 +63,7 @@ func filepathOrContent(fileOrContent interface{}) (content []byte, err error) {
 	}
 }
 
-//通过文件或者证书内容获取TLSConfig
+// 通过文件或者证书内容获取TLSConfig
 func TLSConfigParse(certFile, keyFile interface{}) (TLSConfig *tls.Config, err error) {
 	var cert []byte
 	if cert, err = filepathOrContent(certFile); err != nil {

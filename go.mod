@@ -1,7 +1,11 @@
 module github.com/hwcer/cosweb
 
-go 1.16
+go 1.18
 
+replace (
+github.com/hwcer/cosgo v0.0.1 => ../cosgo
+	github.com/hwcer/registry v0.0.1 => ../registry
+)
 require (
 	github.com/hwcer/cosgo v0.0.1
 	github.com/hwcer/cosmo v0.0.2
@@ -10,7 +14,6 @@ require (
 )
 
 require (
-	github.com/go-redis/redis/v8 v8.11.4
 	github.com/golang/protobuf v1.5.2
 	github.com/onsi/gomega v1.19.0 // indirect
 	github.com/stretchr/testify v1.7.0
