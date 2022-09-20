@@ -86,14 +86,14 @@ func (h *Handler) handle(c *Context, next Next) (err error) {
 			return
 		}
 	}
-	reply, err := handler.Caller(c, node)
+	reply, err := handler.Caller(node, c)
 	if err != nil {
 		return
 	}
 	return handler.Serialize(c, reply)
 }
 
-func (h *Handler) Caller(c *Context, node *registry.Node) (reply interface{}, err error) {
+func (h *Handler) Caller(node *registry.Node, c *Context) (reply interface{}, err error) {
 	if h.caller != nil {
 		return h.caller(node, c)
 	}
