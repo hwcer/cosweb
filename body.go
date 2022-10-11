@@ -2,7 +2,7 @@ package cosweb
 
 import (
 	"bytes"
-	"github.com/hwcer/cosgo/binding"
+	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/values"
 	"io"
 	"net/http"
@@ -42,7 +42,7 @@ func (this *Body) Get(key string) (val interface{}, ok bool) {
 
 func (this *Body) Bind(i interface{}) error {
 	ct := this.request.Header.Get(HeaderContentType)
-	h := binding.Handle(ct)
+	h := binder.ParseMediaHandle(ct)
 	if h == nil {
 		return ErrMimeTypeNotFound
 	}
