@@ -3,6 +3,7 @@ package cosweb
 import (
 	"fmt"
 	"github.com/hwcer/cosweb/session"
+	"github.com/hwcer/registry"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,7 +16,7 @@ const (
 	defaultMemory = 10 << 20 // 10 MB
 )
 
-//Context API上下文.
+// Context API上下文.
 type Context struct {
 	query    url.Values
 	route    []string
@@ -46,7 +47,7 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Body.reset(r)
 }
 
-//释放资源,准备进入缓存池
+// 释放资源,准备进入缓存池
 func (c *Context) release() {
 	c.query = nil
 	c.route = nil
@@ -64,7 +65,7 @@ func (c *Context) next() error {
 	return nil
 }
 
-func (c *Context) doHandle(nodes []*Node) (err error) {
+func (c *Context) doHandle(nodes []*registry.Router) (err error) {
 	if len(nodes) == 0 {
 		return
 	}
@@ -72,17 +73,19 @@ func (c *Context) doHandle(nodes []*Node) (err error) {
 	num := c.aborted
 	for _, node := range nodes {
 		num -= 1
-		c.route = node.Route
-		c.params = node.Params(c.Request.URL.Path)
-		err = node.Handler(c, c.next)
-		if err != nil || c.aborted != num {
-			return
+		c.route = node.Route()[1:]
+		c.params = node.Params(c.Request.Method, c.Request.URL.Path)
+		if handle, ok := node.Handle().(HandlerFunc); ok {
+			err = handle(c, c.next)
+			if err != nil || c.aborted != num {
+				return
+			}
 		}
 	}
 	return
 }
 
-//doMiddleware 执行中间件
+// doMiddleware 执行中间件
 func (c *Context) doMiddleware(middleware []MiddlewareFunc) (error, bool) {
 	if len(middleware) == 0 {
 		return nil, true
@@ -105,18 +108,18 @@ func (c *Context) Abort() {
 	c.aborted += 1
 }
 
-//Route 当期匹配的路由
+// Route 当期匹配的路由
 func (c *Context) Route() string {
 	return strings.Join(c.route, "/")
 }
 
-//IsWebSocket 判断是否WebSocket
+// IsWebSocket 判断是否WebSocket
 func (c *Context) IsWebSocket() bool {
 	upgrade := c.Request.Header.Get(HeaderUpgrade)
 	return strings.ToLower(upgrade) == "websocket"
 }
 
-//Protocol 协议
+// Protocol 协议
 func (c *Context) Protocol() string {
 	// Can't use `r.Request.URL.Protocol`
 	// See: https://groups.google.com/forum/#!topic/golang-nuts/pMUkBlQBDF0
@@ -138,7 +141,7 @@ func (c *Context) Protocol() string {
 	return "http"
 }
 
-//RemoteAddr 客户端地址
+// RemoteAddr 客户端地址
 func (c *Context) RemoteAddr() string {
 	// Fall back to legacy behavior
 	if ip := c.Request.Header.Get(HeaderXForwardedFor); ip != "" {
@@ -151,8 +154,8 @@ func (c *Context) RemoteAddr() string {
 	return ra
 }
 
-//Get 获取参数,优先路径中的params
-//其他方式直接使用c.Request...
+// Get 获取参数,优先路径中的params
+// 其他方式直接使用c.Request...
 func (c *Context) Get(key string, dts ...RequestDataType) interface{} {
 	if len(dts) == 0 {
 		dts = c.engine.RequestDataType
@@ -222,7 +225,7 @@ func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
 	return
 }
 
-//Bind 绑定JSON XML
+// Bind 绑定JSON XML
 func (c *Context) Bind(i interface{}) error {
 	return c.Body.Bind(i)
 }

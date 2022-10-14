@@ -71,7 +71,7 @@ func (h *Handler) handle(c *Context, next Next) (err error) {
 		return next()
 	}
 	r := c.engine.Registry
-	urlPath := r.Clean(strings.Join(c.route[1:], "/"))
+	urlPath := registry.Join(c.route...)
 	node, ok := r.Match(urlPath)
 	if !ok {
 		return next()

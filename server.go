@@ -4,11 +4,13 @@ import (
 	ctx "context"
 	"crypto/tls"
 	"errors"
+	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/utils"
 	"github.com/hwcer/cosweb/session"
 	"github.com/hwcer/logger"
 	"github.com/hwcer/registry"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,14 +18,14 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		scc        *utils.SCC
-		pool       sync.Pool
-		middleware []MiddlewareFunc //中间件
-		Render     Render
-		Server     *http.Server
-		Router     *Router
-		Registry   *registry.Registry
-		//SessionDataType  RequestDataTypeMap //获取SESSION ID时默认的查询方式
+		scc              *utils.SCC
+		pool             sync.Pool
+		middleware       []MiddlewareFunc //中间件
+		Render           Render
+		Server           *http.Server
+		Binder           binder.Interface
+		Router           *registry.Router
+		Registry         *registry.Registry
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
 	}
@@ -56,6 +58,8 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 		scc:      utils.NewSCC(nil),
 		pool:     sync.Pool{},
 		Server:   new(http.Server),
+		Binder:   binder.New(binder.EncodingTypeJson),
+		Router:   registry.NewRouter(),
 		Registry: registry.New(nil),
 		//ContentType: ContentTypeApplicationJSON,
 	}
@@ -70,7 +74,7 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	e.pool.New = func() interface{} {
 		return NewContext(e)
 	}
-	e.Router = NewRouter()
+	//e.Router = NewRouter()
 	return
 }
 
@@ -143,12 +147,13 @@ func (this *Server) Service(name string, handler ...interface{}) *registry.Servi
 
 // AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
-func (s *Server) Register(path string, handler HandlerFunc, method ...string) {
+func (s *Server) Register(route string, handler HandlerFunc, method ...string) {
 	if len(method) == 0 {
-		method = AnyHttpMethod
+		method = []string{http.MethodGet, http.MethodPost}
 	}
-	//fmt.Printf("Server Registry:%v  Method:%v\n", path, method)
-	s.Router.Register(path, handler, method...)
+	for _, m := range method {
+		_ = s.Router.Register(handler, strings.ToUpper(m), route)
+	}
 }
 
 // Acquire returns an empty `Context` instance from the pool.
@@ -208,7 +213,7 @@ func (s *Server) Start(address string) (err error) {
 		if handler, ok := service.Handler.(*Handler); ok {
 			servicePath := service.Name()
 			for _, serviceMethod := range service.Paths() {
-				path := service.Clean(servicePath, serviceMethod)
+				path := registry.Join(servicePath, serviceMethod)
 				s.Register(path, handler.handle, handler.method...)
 			}
 		}
