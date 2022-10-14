@@ -73,7 +73,7 @@ func (c *Context) doHandle(nodes []*registry.Router) (err error) {
 	num := c.aborted
 	for _, node := range nodes {
 		num -= 1
-		c.route = node.Route()[1:]
+		c.route = node.Route()[2:]
 		c.params = node.Params(c.Request.Method, c.Request.URL.Path)
 		if handle, ok := node.Handle().(HandlerFunc); ok {
 			err = handle(c, c.next)
