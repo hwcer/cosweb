@@ -21,9 +21,9 @@ type (
 		scc              *utils.SCC
 		pool             sync.Pool
 		middleware       []MiddlewareFunc //中间件
+		Binder           binder.Interface //默认序列化方式
 		Render           Render
 		Server           *http.Server
-		Binder           binder.Interface
 		Router           *registry.Router
 		Registry         *registry.Registry
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
@@ -57,11 +57,10 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	e = &Server{
 		scc:      utils.NewSCC(nil),
 		pool:     sync.Pool{},
+		Binder:   binder.Handle(binder.MIMEJSON),
 		Server:   new(http.Server),
-		Binder:   binder.New(binder.EncodingTypeJson),
 		Router:   registry.NewRouter(),
 		Registry: registry.New(nil),
-		//ContentType: ContentTypeApplicationJSON,
 	}
 	if len(tlsConfig) > 0 {
 		e.Server.TLSConfig = tlsConfig[0]
@@ -131,11 +130,7 @@ func (s *Server) Static(prefix, root string, method ...string) *Static {
 func (this *Server) Service(name string, handler ...interface{}) *registry.Service {
 	service := this.Registry.Service(name)
 	if service.Handler == nil {
-		h := &Handler{}
-		service.Handler = h
-		service.On(registry.FilterEventTypeFunc, h.Filter)
-		service.On(registry.FilterEventTypeMethod, h.Filter)
-		service.On(registry.FilterEventTypeStruct, h.Filter)
+		service.Handler = &Handler{}
 	}
 	if h, ok := service.Handler.(*Handler); ok {
 		for _, i := range handler {

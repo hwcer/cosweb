@@ -73,7 +73,7 @@ const (
 	ContentTypeApplicationForm                 = "application/x-www-form-urlencoded"
 )
 
-//GetContentTypeCharset
+// GetContentTypeCharset
 func GetContentTypeCharset(contentType ContentType) string {
 	return string(contentType) + "; charset=" + Charset
 }

@@ -2,6 +2,7 @@ package cosweb
 
 import (
 	"fmt"
+	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosweb/session"
 	"github.com/hwcer/registry"
 	"net"
@@ -24,6 +25,7 @@ type Context struct {
 	engine   *Server
 	aborted  int
 	Body     *Body
+	Binder   binder.Interface
 	Cookie   *Cookie
 	Session  *session.Session
 	Request  *http.Request
@@ -42,6 +44,7 @@ func NewContext(s *Server) *Context {
 }
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
+	c.Binder = c.engine.Binder
 	c.Request = r
 	c.Response = w
 	c.Body.reset(r)

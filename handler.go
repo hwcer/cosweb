@@ -1,7 +1,6 @@
 package cosweb
 
 import (
-	"github.com/hwcer/cosgo/message"
 	"github.com/hwcer/logger"
 	"github.com/hwcer/registry"
 	"reflect"
@@ -15,12 +14,13 @@ type handleCaller interface {
 }
 
 type HandlerCaller func(node *registry.Node, c *Context) (interface{}, error)
-
-type HandlerSerialize func(c *Context, reply interface{}) error
+type HandlerFilter func(node *registry.Node) bool
+type HandlerSerialize func(c *Context, reply interface{}) (interface{}, error)
 
 type Handler struct {
 	method     []string
-	caller     HandlerCaller    //自定义全局消息调用
+	caller     HandlerCaller //自定义全局消息调用
+	filter     HandlerFilter
 	serialize  HandlerSerialize //消息序列化封装
 	middleware []MiddlewareFunc
 }
@@ -28,6 +28,9 @@ type Handler struct {
 func (h *Handler) Use(src interface{}) {
 	if v, ok := src.(HandlerCaller); ok {
 		h.caller = v
+	}
+	if v, ok := src.(HandlerFilter); ok {
+		h.filter = v
 	}
 	if v, ok := src.(HandlerSerialize); ok {
 		h.serialize = v
@@ -40,6 +43,9 @@ func (h *Handler) Use(src interface{}) {
 	}
 }
 func (h *Handler) Filter(node *registry.Node) bool {
+	if h.filter != nil {
+		return h.filter(node)
+	}
 	if node.IsFunc() {
 		_, ok := node.Method().(func(*Context) interface{})
 		return ok
@@ -108,9 +114,17 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply interface{}, er
 	}
 	return
 }
-func (this *Handler) Serialize(c *Context, reply interface{}) error {
+func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
 	if this.serialize != nil {
-		return this.serialize(c, reply)
+		reply, err = this.serialize(c, reply)
 	}
-	return c.JSON(message.Parse(reply))
+	if err != nil {
+		return err
+	}
+	var data []byte
+	data, err = c.Binder.Marshal(reply)
+	if err != nil {
+		return err
+	}
+	return c.Bytes(ContentType(c.Binder.String()), data)
 }
