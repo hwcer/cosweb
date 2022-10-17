@@ -118,7 +118,7 @@ func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
 	if this.serialize != nil {
 		reply, err = this.serialize(c, reply)
 	}
-	if err != nil {
+	if err != nil || reply == nil {
 		return err
 	}
 	var data []byte
