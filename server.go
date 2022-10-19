@@ -57,7 +57,7 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 	e = &Server{
 		scc:      utils.NewSCC(nil),
 		pool:     sync.Pool{},
-		Binder:   binder.Handle(binder.MIMEJSON),
+		Binder:   binder.New(binder.MIMEJSON),
 		Server:   new(http.Server),
 		Router:   registry.NewRouter(),
 		Registry: registry.New(nil),
