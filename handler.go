@@ -1,11 +1,12 @@
 package cosweb
 
 import (
+	"fmt"
+	"github.com/hwcer/cosgo/message"
 	"github.com/hwcer/logger"
 	"github.com/hwcer/registry"
 	"reflect"
 	"runtime/debug"
-	"strings"
 )
 
 // registry 通过registry集中注册对象
@@ -64,24 +65,21 @@ func (h *Handler) Filter(node *registry.Node) bool {
 	}
 }
 
+// closure 闭包绑定Node和route
+func (h *Handler) closure(node *registry.Node) HandlerFunc {
+	return func(c *Context, next Next) error {
+		return h.handle(c, node)
+	}
+}
+
 // handle cosweb入口
-func (h *Handler) handle(c *Context, next Next) (err error) {
+func (h *Handler) handle(c *Context, node *registry.Node) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			if v := recover(); v != nil {
-				logger.Info("cosweb server recover error:%v\n%v", v, string(debug.Stack()))
-			}
+			err = fmt.Errorf("%v", e)
+			logger.Info("cosweb server recover error:%v\n%v", e, string(debug.Stack()))
 		}
 	}()
-	if c.Request.URL.Path == "" || strings.Contains(c.Request.URL.Path, ".") {
-		return next()
-	}
-	r := c.engine.Registry
-	urlPath := registry.Join(c.route...)
-	node, ok := r.Match(urlPath)
-	if !ok {
-		return next()
-	}
 	service := node.Service()
 	handler, ok := service.Handler.(*Handler)
 	if !ok {
@@ -118,13 +116,17 @@ func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
 	if this.serialize != nil {
 		reply, err = this.serialize(c, reply)
 	}
-	if err != nil || reply == nil {
+	if err != nil || !c.Writable() {
 		return err
 	}
+	var ok bool
 	var data []byte
-	data, err = c.Binder.Marshal(reply)
+	if data, ok = reply.([]byte); !ok {
+		data, err = c.Binder.Marshal(message.Parse(reply))
+	}
 	if err != nil {
 		return err
+	} else {
+		return c.Bytes(ContentType(c.Binder.String()), data)
 	}
-	return c.Bytes(ContentType(c.Binder.String()), data)
 }

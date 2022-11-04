@@ -204,15 +204,13 @@ func (s *Server) Start(address string) (err error) {
 	s.scc.Add(1)
 	s.Server.Addr = address
 	//注册所有 service
-	for _, service := range s.Registry.Services() {
+	s.Registry.Range(func(service *registry.Service, node *registry.Node) bool {
 		if handler, ok := service.Handler.(*Handler); ok {
-			servicePath := service.Name()
-			for _, serviceMethod := range service.Paths() {
-				path := registry.Join(servicePath, serviceMethod)
-				s.Register(path, handler.handle, handler.method...)
-			}
+			path := registry.Join(service.Name(), node.Name())
+			s.Register(path, handler.closure(node), handler.method...)
 		}
-	}
+		return true
+	})
 	//启动服务
 	err = utils.Timeout(time.Second, func() error {
 		if s.Server.TLSConfig != nil {
