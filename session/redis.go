@@ -30,7 +30,7 @@ func NewRedis(address interface{}, prefix ...string) (c *Redis, err error) {
 	case string:
 		c.address = v
 	default:
-		err = errors.New("address type must be string or *github.com/hwcer/cosgo/redis.Client")
+		err = errors.New("address type must be string or *redis.Client")
 	}
 	return
 }
