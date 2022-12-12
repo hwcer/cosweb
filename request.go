@@ -1,7 +1,7 @@
 package cosweb
 
 import (
-	"github.com/hwcer/logger"
+	"github.com/hwcer/cosgo/logger"
 	"net/url"
 )
 

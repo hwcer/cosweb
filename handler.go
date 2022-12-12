@@ -2,8 +2,8 @@ package cosweb
 
 import (
 	"fmt"
-	"github.com/hwcer/cosgo/message"
-	"github.com/hwcer/logger"
+	"github.com/hwcer/cosgo/logger"
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/registry"
 	"reflect"
 	"runtime/debug"
@@ -122,7 +122,7 @@ func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
 	var ok bool
 	var data []byte
 	if data, ok = reply.([]byte); !ok {
-		data, err = c.Binder.Marshal(message.Parse(reply))
+		data, err = c.Binder.Marshal(values.NewMessage(reply))
 	}
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-package cosweb
+package middleware
 
 import (
 	"golang.org/x/crypto/acme/autocert"

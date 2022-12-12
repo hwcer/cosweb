@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/values"
-	"github.com/hwcer/logger"
 	"io"
 	"net/http"
 )
@@ -14,23 +13,29 @@ func NewBody() *Body {
 }
 
 type Body struct {
-	bytes   []byte
-	values  values.Values
-	request *http.Request
+	bytes  []byte
+	binder binder.Interface
+	values values.Values
+	errors error
 }
 
 func (this *Body) reset(req *http.Request) {
-	this.request = req
+	ct := req.Header.Get(HeaderContentType)
+	this.binder = binder.Handle(ct)
+	if this.binder == nil {
+		this.errors = ErrMimeTypeNotFound
+		return
+	}
 	if err := this.readAll(req.Body); err != nil {
-		req.Body = nil
-		logger.Error("read body error:%v", err)
+		this.errors = err
 		return
 	}
 	req.Body = io.NopCloser(bytes.NewReader(this.bytes))
 }
 func (this *Body) release() {
+	this.binder = nil
 	this.values = nil
-	this.request = nil
+	this.errors = nil
 }
 
 func (this *Body) Get(key string) (val interface{}, ok bool) {
@@ -42,16 +47,14 @@ func (this *Body) Get(key string) (val interface{}, ok bool) {
 }
 
 func (this *Body) Bind(i interface{}) error {
-	ct := this.request.Header.Get(HeaderContentType)
-	h := binder.Handle(ct)
-	if h == nil {
-		return ErrMimeTypeNotFound
+	if this.errors != nil {
+		return this.errors
 	}
 	v := this.Bytes()
 	if len(v) == 0 {
 		return nil
 	}
-	return h.Unmarshal(v, i)
+	return this.binder.Unmarshal(v, i)
 }
 
 func (this *Body) Bytes() []byte {
@@ -59,6 +62,9 @@ func (this *Body) Bytes() []byte {
 }
 
 func (this *Body) Reader() (io.Reader, error) {
+	if this.errors != nil {
+		return nil, this.errors
+	}
 	return bytes.NewReader(this.Bytes()), nil
 }
 

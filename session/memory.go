@@ -1,7 +1,7 @@
 package session
 
 import (
-	"github.com/hwcer/cosgo/smap"
+	"github.com/hwcer/cosgo/storage"
 	"github.com/hwcer/cosgo/values"
 	"time"
 )
@@ -10,14 +10,14 @@ var Heartbeat int32 = 10 //心跳(S)
 
 func NewMemory() *Memory {
 	s := &Memory{
-		Hash: *smap.NewHash(1024),
+		Hash: *storage.NewHash(1024),
 	}
 	s.Array.NewSetter = NewSetter
 	return s
 }
 
 type Memory struct {
-	smap.Hash
+	storage.Hash
 	stop chan struct{}
 }
 
@@ -30,7 +30,7 @@ func (this *Memory) Start() error {
 }
 
 func (this *Memory) get(token string) (*Setter, error) {
-	mid := smap.MID(token)
+	mid := storage.MID(token)
 	if v, ok := this.Hash.Array.Get(mid); !ok {
 		return nil, ErrorSessionIllegal
 	} else {
@@ -92,9 +92,9 @@ func (this *Memory) Delete(uuid string) error {
 	return nil
 }
 
-//Create 创建新SESSION,返回SESSION Index
-//Create会自动设置有效期
-//Create新数据为锁定状态
+// Create 创建新SESSION,返回SESSION Index
+// Create会自动设置有效期
+// Create新数据为锁定状态
 func (this *Memory) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
 	d := this.Hash.Create(uuid, data)
 	setter, _ := d.(*Setter)
@@ -137,13 +137,12 @@ func (this *Memory) worker() {
 func (this *Memory) clean() {
 	nowTime := time.Now().Unix()
 	var keys []string
-	this.Hash.Array.Range(func(item smap.Setter) bool {
+	this.Hash.Array.Range(func(item storage.Setter) bool {
 		if data, ok := item.(*Setter); ok && data.expire < nowTime {
 			keys = append(keys, data.uuid)
 		}
 		return true
 	})
-
 	if len(keys) > 0 {
 		this.Hash.Remove(keys...)
 	}

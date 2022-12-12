@@ -5,9 +5,9 @@ import (
 	"crypto/tls"
 	"errors"
 	"github.com/hwcer/cosgo/binder"
+	"github.com/hwcer/cosgo/logger"
 	"github.com/hwcer/cosgo/utils"
 	"github.com/hwcer/cosweb/session"
-	"github.com/hwcer/logger"
 	"github.com/hwcer/registry"
 	"net/http"
 	"strings"
@@ -86,7 +86,7 @@ func (s *Server) DefaultHTTPErrorHandler(c *Context, err error) {
 	}
 	c.WriteHeader(he.Code)
 	if c.Request.Method != http.MethodHead {
-		c.Bytes(ContentTypeTextPlain, []byte(he.String()))
+		_ = c.Bytes(ContentTypeTextPlain, []byte(he.String()))
 	}
 	if he.Code != http.StatusNotFound {
 		logger.Error(he)
@@ -171,8 +171,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.scc.Add(1)
 	c := s.Acquire(w, r)
 	defer func() {
-		if err := recover(); err != nil {
-			s.HTTPErrorHandler(c, NewHTTPError500(err))
+		if e := recover(); e != nil {
+			s.HTTPErrorHandler(c, NewHTTPError500(e))
 		}
 		s.scc.Done()
 		s.Release(c)
@@ -180,6 +180,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if s.scc.Stopped() {
 		s.HTTPErrorHandler(c, errors.New("server stopped"))
+		return
+	}
+	if c.Body.errors != nil {
+		s.HTTPErrorHandler(c, NewHTTPError500(c.Body.errors))
 		return
 	}
 
@@ -229,7 +233,7 @@ func (s *Server) Start(address string) (err error) {
 func (s *Server) Close() error {
 	s.scc.Done()
 	if s.scc.Cancel() {
-		s.scc.Wait(10 * time.Second)
+		_ = s.scc.Wait(10 * time.Second)
 	}
 	err := s.Server.Close()
 	if err == nil {
