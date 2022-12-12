@@ -4,12 +4,10 @@ go 1.18
 
 replace (
 	github.com/hwcer/cosgo v0.0.1 => ../cosgo
-	github.com/hwcer/registry v0.0.1 => ../registry
 )
 
 require (
 	github.com/hwcer/cosgo v0.0.1
-	github.com/hwcer/registry v0.0.1
 )
 
 require (

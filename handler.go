@@ -3,8 +3,8 @@ package cosweb
 import (
 	"fmt"
 	"github.com/hwcer/cosgo/logger"
+	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/values"
-	"github.com/hwcer/registry"
 	"reflect"
 	"runtime/debug"
 )

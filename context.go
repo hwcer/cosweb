@@ -3,8 +3,8 @@ package cosweb
 import (
 	"fmt"
 	"github.com/hwcer/cosgo/binder"
+	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosweb/session"
-	"github.com/hwcer/registry"
 	"net"
 	"net/http"
 	"net/url"
