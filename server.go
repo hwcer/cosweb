@@ -182,10 +182,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.HTTPErrorHandler(c, errors.New("server stopped"))
 		return
 	}
-	if c.Body.errors != nil {
-		s.HTTPErrorHandler(c, NewHTTPError500(c.Body.errors))
-		return
-	}
 
 	if err, ok := c.doMiddleware(s.middleware); err != nil {
 		s.HTTPErrorHandler(c, err)

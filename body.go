@@ -16,18 +16,17 @@ type Body struct {
 	bytes  []byte
 	binder binder.Interface
 	values values.Values
-	errors error
+	//errors error
 }
 
 func (this *Body) reset(req *http.Request) {
 	ct := req.Header.Get(HeaderContentType)
 	this.binder = binder.Handle(ct)
 	if this.binder == nil {
-		this.errors = ErrMimeTypeNotFound
 		return
 	}
 	if err := this.readAll(req.Body); err != nil {
-		this.errors = err
+		this.bytes = nil
 		return
 	}
 	req.Body = io.NopCloser(bytes.NewReader(this.bytes))
@@ -35,7 +34,6 @@ func (this *Body) reset(req *http.Request) {
 func (this *Body) release() {
 	this.binder = nil
 	this.values = nil
-	this.errors = nil
 }
 
 func (this *Body) Get(key string) (val interface{}, ok bool) {
@@ -47,8 +45,8 @@ func (this *Body) Get(key string) (val interface{}, ok bool) {
 }
 
 func (this *Body) Bind(i interface{}) error {
-	if this.errors != nil {
-		return this.errors
+	if this.binder == nil {
+		return ErrMimeTypeNotFound
 	}
 	v := this.Bytes()
 	if len(v) == 0 {
@@ -62,9 +60,6 @@ func (this *Body) Bytes() []byte {
 }
 
 func (this *Body) Reader() (io.Reader, error) {
-	if this.errors != nil {
-		return nil, this.errors
-	}
 	return bytes.NewReader(this.Bytes()), nil
 }
 
