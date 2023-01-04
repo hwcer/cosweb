@@ -1,7 +1,6 @@
 package cosweb
 
 import (
-	"fmt"
 	"github.com/hwcer/cosgo/logger"
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/values"
@@ -76,8 +75,8 @@ func (h *Handler) closure(node *registry.Node) HandlerFunc {
 func (h *Handler) handle(c *Context, node *registry.Node) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = fmt.Errorf("%v", e)
-			logger.Info("cosweb server recover error:%v\n%v", e, string(debug.Stack()))
+			err = ErrInternalServerError
+			logger.Info("%v\n%v", e, string(debug.Stack()))
 		}
 	}()
 	service := node.Service()

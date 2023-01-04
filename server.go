@@ -88,7 +88,7 @@ func (s *Server) DefaultHTTPErrorHandler(c *Context, err error) {
 	if c.Request.Method != http.MethodHead {
 		_ = c.Bytes(ContentTypeTextPlain, []byte(he.String()))
 	}
-	if he.Code != http.StatusNotFound {
+	if he.Code != http.StatusNotFound && he.Code != http.StatusInternalServerError {
 		logger.Error(he)
 	}
 }
