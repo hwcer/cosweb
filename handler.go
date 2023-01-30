@@ -79,7 +79,7 @@ func (h *Handler) handle(c *Context, node *registry.Node) (err error) {
 			logger.Info("%v\n%v", e, string(debug.Stack()))
 		}
 	}()
-	service := node.Service()
+	service := node.Service
 	handler, ok := service.Handler.(*Handler)
 	if !ok {
 		return ErrHandlerError

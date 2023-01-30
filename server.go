@@ -9,6 +9,7 @@ import (
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/utils"
 	"github.com/hwcer/cosweb/session"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ type (
 		Registry         *registry.Registry
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
+		registered       bool //是否已经完成注册
 	}
 	Next func() error
 	// HandlerFunc defines a function to serve HTTP requests.
@@ -140,7 +142,7 @@ func (this *Server) Service(name string, handler ...interface{}) *registry.Servi
 	return service
 }
 
-// AddTarget registers a new Register for an HTTP value and path with matching handler
+// Register AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
 func (s *Server) Register(route string, handler HandlerFunc, method ...string) {
 	if len(method) == 0 {
@@ -201,16 +203,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Start starts an HTTP server.
 func (s *Server) Start(address string) (err error) {
-	s.scc.Add(1)
+	s.register()
 	s.Server.Addr = address
-	//注册所有 service
-	s.Registry.Range(func(service *registry.Service, node *registry.Node) bool {
-		if handler, ok := service.Handler.(*Handler); ok {
-			path := registry.Join(service.Name(), node.Name())
-			s.Register(path, handler.closure(node), handler.method...)
-		}
-		return true
-	})
 	//启动服务
 	err = utils.Timeout(time.Second, func() error {
 		if s.Server.TLSConfig != nil {
@@ -245,4 +239,32 @@ func (s *Server) Shutdown(ctx ctx.Context) error {
 		err = session.Close()
 	}
 	return err
+}
+
+func (s *Server) Listener(ln net.Listener) (err error) {
+	s.register()
+	//启动服务
+	err = utils.Timeout(time.Second, func() error {
+		return s.Server.Serve(ln)
+	})
+	if err != nil && err != utils.ErrorTimeout {
+		return
+	}
+	return
+}
+
+// register 注册所有 service
+func (s *Server) register() {
+	if s.registered {
+		return
+	}
+	s.registered = true
+	s.scc.Add(1)
+	s.Registry.Nodes(func(node *registry.Node) bool {
+		if handler, ok := node.Service.Handler.(*Handler); ok {
+			path := registry.Join(node.Service.Name(), node.Name())
+			s.Register(path, handler.closure(node), handler.method...)
+		}
+		return true
+	})
 }
