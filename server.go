@@ -55,7 +55,7 @@ var (
 )
 
 // Push creates an instance of Server.
-func NewServer(tlsConfig ...*tls.Config) (e *Server) {
+func NewServer() (e *Server) {
 	e = &Server{
 		scc:      utils.NewSCC(nil),
 		pool:     sync.Pool{},
@@ -63,9 +63,6 @@ func NewServer(tlsConfig ...*tls.Config) (e *Server) {
 		Server:   new(http.Server),
 		Router:   registry.NewRouter(),
 		Registry: registry.New(nil),
-	}
-	if len(tlsConfig) > 0 {
-		e.Server.TLSConfig = tlsConfig[0]
 	}
 	e.Server.Handler = e
 	//e.SessionDataType = defaultSessionDataType
@@ -202,9 +199,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start starts an HTTP server.
-func (s *Server) Start(address string) (err error) {
+func (s *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 	s.register()
 	s.Server.Addr = address
+	if len(tlsConfig) > 0 {
+		s.Server.TLSConfig = tlsConfig[0]
+	}
 	//启动服务
 	err = utils.Timeout(time.Second, func() error {
 		if s.Server.TLSConfig != nil {
@@ -213,10 +213,10 @@ func (s *Server) Start(address string) (err error) {
 			return s.Server.ListenAndServe()
 		}
 	})
-	if err != nil && err != utils.ErrorTimeout {
-		return err
+	if err == utils.ErrorTimeout {
+		err = nil
 	}
-	return nil
+	return
 }
 
 // Close 立即关闭
@@ -243,12 +243,14 @@ func (s *Server) Shutdown(ctx ctx.Context) error {
 
 func (s *Server) Listener(ln net.Listener) (err error) {
 	s.register()
+	//s.Server = &http.Server{Handler: cors.Default().Handler(s)}
+	//s.Server.Handler =cors.Default().Handler(s)
 	//启动服务
 	err = utils.Timeout(time.Second, func() error {
 		return s.Server.Serve(ln)
 	})
-	if err != nil && err != utils.ErrorTimeout {
-		return
+	if err == utils.ErrorTimeout {
+		err = nil
 	}
 	return
 }
