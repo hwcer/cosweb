@@ -2,12 +2,9 @@ module github.com/hwcer/cosweb
 
 go 1.18
 
-replace github.com/hwcer/cosgo v0.0.1 => ../cosgo
+replace github.com/hwcer/cosgo v0.0.0 => ../cosgo
 
-require (
-	github.com/hwcer/cosgo v0.0.1
-	github.com/soheilhy/cmux v0.1.4
-)
+require github.com/hwcer/cosgo v0.0.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -24,6 +21,7 @@ require (
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe // indirect
+	github.com/onsi/gomega v1.19.0 // indirect
 	github.com/pelletier/go-toml v1.7.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
@@ -41,16 +39,12 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.mongodb.org/mongo-driver v1.11.1 // indirect
+	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20220128215802-99c3d69c2c27 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	gopkg.in/ini.v1 v1.51.0 // indirect
-)
-
-require (
-	github.com/onsi/gomega v1.19.0 // indirect
-	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
 	google.golang.org/protobuf v1.28.1 // indirect
+	gopkg.in/ini.v1 v1.51.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
