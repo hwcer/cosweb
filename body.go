@@ -59,8 +59,9 @@ func (this *Body) Bytes() []byte {
 	return this.bytes
 }
 
-func (this *Body) Reader() (io.Reader, error) {
-	return bytes.NewReader(this.Bytes()), nil
+func (this *Body) Reader() (r io.Reader, err error) {
+	r = bytes.NewReader(this.Bytes())
+	return
 }
 
 func (this *Body) Values() (values.Values, error) {
