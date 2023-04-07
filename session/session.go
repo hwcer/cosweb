@@ -44,13 +44,17 @@ func (this *Session) Start(token string, level StartType) (err error) {
 
 	if this.uuid, this.values, err = Options.storage.Get(this.token, lock); err != nil {
 		return err
-	} else if len(this.values) == 0 {
+	} else if this.values == nil {
 		return ErrorSessionNotExist
 	}
 	if lock {
 		this.locked = lock
 	}
 	return nil
+}
+
+func (this *Session) UUID() string {
+	return this.uuid
 }
 
 func (this *Session) Get(key string) (v interface{}) {
@@ -95,7 +99,7 @@ func (this *Session) All() values.Values {
 	return data
 }
 
-//Create 创建SESSION，uuid 用户唯一ID，可以检测是不是重复登录
+// Create 创建SESSION，uuid 用户唯一ID，可以检测是不是重复登录
 func (this *Session) Create(uuid string, data values.Values) (token string, err error) {
 	if Options.storage == nil {
 		return "", ErrorStorageNotSet
@@ -122,7 +126,7 @@ func (this *Session) Delete() (err error) {
 	return
 }
 
-//Release 释放 session 由HTTP SERVER
+// Release 释放 session 由HTTP SERVER
 func (this *Session) Release() {
 	if this.uuid == "" || this.token == "" {
 		return
