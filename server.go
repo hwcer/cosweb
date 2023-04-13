@@ -5,10 +5,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"github.com/hwcer/cosgo/binder"
-	"github.com/hwcer/cosgo/logger"
 	"github.com/hwcer/cosgo/registry"
-	"github.com/hwcer/cosgo/utils"
+	"github.com/hwcer/cosgo/scc"
 	"github.com/hwcer/cosweb/session"
+	"github.com/hwcer/logger"
 	"net"
 	"net/http"
 	"strings"
@@ -19,7 +19,6 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		scc              *utils.SCC
 		pool             sync.Pool
 		middleware       []MiddlewareFunc //中间件
 		Binder           binder.Interface //默认序列化方式
@@ -57,7 +56,6 @@ var (
 // Push creates an instance of Server.
 func NewServer() (e *Server) {
 	e = &Server{
-		scc:      utils.NewSCC(nil),
 		pool:     sync.Pool{},
 		Binder:   binder.New(binder.MIMEJSON),
 		Server:   new(http.Server),
@@ -167,17 +165,17 @@ func (s *Server) Release(c *Context) {
 
 // ServeHTTP implements `http.Handler` interface, which serves HTTP requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.scc.Add(1)
+	scc.Add(1)
 	c := s.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
 			s.HTTPErrorHandler(c, NewHTTPError500(e))
 		}
-		s.scc.Done()
+		scc.Done()
 		s.Release(c)
 	}()
 
-	if s.scc.Stopped() {
+	if scc.Stopped() {
 		s.HTTPErrorHandler(c, errors.New("server stopped"))
 		return
 	}
@@ -206,39 +204,33 @@ func (s *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 		s.Server.TLSConfig = tlsConfig[0]
 	}
 	//启动服务
-	err = utils.Timeout(time.Second, func() error {
+	err = scc.Timeout(time.Second, func() error {
 		if s.Server.TLSConfig != nil {
 			return s.Server.ListenAndServeTLS("", "")
 		} else {
 			return s.Server.ListenAndServe()
 		}
 	})
-	if err == utils.ErrorTimeout {
+	if err == scc.ErrorTimeout {
 		err = nil
 	}
 	return
 }
 
 // Close 立即关闭
-func (s *Server) Close() error {
-	s.scc.Done()
-	if s.scc.Cancel() {
-		_ = s.scc.Wait(10 * time.Second)
+func (s *Server) Close() (err error) {
+	if err = s.Server.Close(); err == nil {
+		err = s.stopped()
 	}
-	err := s.Server.Close()
-	if err == nil {
-		err = session.Close()
-	}
-	return err
+	return
 }
 
 // Shutdown 优雅关闭，等所有协程结束
-func (s *Server) Shutdown(ctx ctx.Context) error {
-	err := s.Server.Shutdown(ctx)
-	if err == nil {
-		err = session.Close()
+func (s *Server) Shutdown(ctx ctx.Context) (err error) {
+	if err = s.Server.Shutdown(ctx); err == nil {
+		err = s.stopped()
 	}
-	return err
+	return
 }
 
 func (s *Server) Listener(ln net.Listener) (err error) {
@@ -246,13 +238,18 @@ func (s *Server) Listener(ln net.Listener) (err error) {
 	//s.Server = &http.Server{Handler: cors.Default().Handler(s)}
 	//s.Server.Handler =cors.Default().Handler(s)
 	//启动服务
-	err = utils.Timeout(time.Second, func() error {
+	err = scc.Timeout(time.Second, func() error {
 		return s.Server.Serve(ln)
 	})
-	if err == utils.ErrorTimeout {
+	if err == scc.ErrorTimeout {
 		err = nil
 	}
 	return
+}
+
+func (s *Server) stopped() error {
+	scc.Done()
+	return session.Close()
 }
 
 // register 注册所有 service
@@ -261,7 +258,7 @@ func (s *Server) register() {
 		return
 	}
 	s.registered = true
-	s.scc.Add(1)
+	scc.Add(1)
 	s.Registry.Nodes(func(node *registry.Node) bool {
 		if handler, ok := node.Service.Handler.(*Handler); ok {
 			path := registry.Join(node.Service.Name(), node.Name())
