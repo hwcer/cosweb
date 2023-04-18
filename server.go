@@ -1,7 +1,6 @@
 package cosweb
 
 import (
-	ctx "context"
 	"crypto/tls"
 	"errors"
 	"github.com/hwcer/cosgo/binder"
@@ -9,10 +8,12 @@ import (
 	"github.com/hwcer/cosgo/scc"
 	"github.com/hwcer/cosweb/session"
 	"github.com/hwcer/logger"
+	"golang.org/x/net/context"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type (
 	// Server is the top-level framework instance.
 	Server struct {
 		pool             sync.Pool
+		status           int32            //是否已经完成注册
 		middleware       []MiddlewareFunc //中间件
 		Binder           binder.Interface //默认序列化方式
 		Render           Render
@@ -28,7 +30,6 @@ type (
 		Registry         *registry.Registry
 		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		HTTPErrorHandler HTTPErrorHandler
-		registered       bool //是否已经完成注册
 	}
 	Next func() error
 	// HandlerFunc defines a function to serve HTTP requests.
@@ -165,13 +166,11 @@ func (s *Server) Release(c *Context) {
 
 // ServeHTTP implements `http.Handler` interface, which serves HTTP requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	scc.Add(1)
 	c := s.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
 			s.HTTPErrorHandler(c, NewHTTPError500(e))
 		}
-		scc.Done()
 		s.Release(c)
 	}()
 
@@ -217,20 +216,13 @@ func (s *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 	return
 }
 
-// Close 立即关闭
-func (s *Server) Close() (err error) {
-	if err = s.Server.Close(); err == nil {
-		err = s.stopped()
+func (s *Server) Close() {
+	if !atomic.CompareAndSwapInt32(&s.status, 1, 0) {
+		return
 	}
-	return
-}
-
-// Shutdown 优雅关闭，等所有协程结束
-func (s *Server) Shutdown(ctx ctx.Context) (err error) {
-	if err = s.Server.Shutdown(ctx); err == nil {
-		err = s.stopped()
-	}
-	return
+	_ = s.Server.Shutdown(context.Background())
+	_ = session.Close()
+	scc.Done()
 }
 
 func (s *Server) Listener(ln net.Listener) (err error) {
@@ -247,18 +239,14 @@ func (s *Server) Listener(ln net.Listener) (err error) {
 	return
 }
 
-func (s *Server) stopped() error {
-	scc.Done()
-	return session.Close()
-}
-
 // register 注册所有 service
 func (s *Server) register() {
-	if s.registered {
+	if !atomic.CompareAndSwapInt32(&s.status, 0, 1) {
 		return
 	}
-	s.registered = true
 	scc.Add(1)
+	scc.CGO(s.heartbeat)
+	//scc.Add(1)
 	s.Registry.Nodes(func(node *registry.Node) bool {
 		if handler, ok := node.Service.Handler.(*Handler); ok {
 			path := registry.Join(node.Service.Name(), node.Name())
@@ -266,4 +254,14 @@ func (s *Server) register() {
 		}
 		return true
 	})
+}
+
+func (this *Server) heartbeat(ctx context.Context) {
+	defer this.Close()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		}
+	}
 }
