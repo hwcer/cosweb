@@ -121,7 +121,7 @@ func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
 	var ok bool
 	var data []byte
 	if data, ok = reply.([]byte); !ok {
-		data, err = c.Binder.Marshal(values.NewMessage(reply))
+		data, err = c.Binder.Marshal(values.Parse(reply))
 	}
 	if err != nil {
 		return err
