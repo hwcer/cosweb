@@ -6,7 +6,7 @@ replace github.com/hwcer/cosgo v0.0.0 => ../cosgo
 
 require (
 	github.com/hwcer/cosgo v0.0.0
-	github.com/hwcer/logger v0.0.3
+	github.com/hwcer/logger v0.0.5
 )
 
 require (
