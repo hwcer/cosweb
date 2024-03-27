@@ -1,9 +1,9 @@
 package cosweb
 
 import (
-	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/logger"
+	"github.com/hwcer/registry"
 	"reflect"
 	"runtime/debug"
 )
