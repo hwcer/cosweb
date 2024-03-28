@@ -13,15 +13,15 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		pool             sync.Pool
-		status           int32            //是否已经完成注册
+		SCC  *scc.SCC
+		pool sync.Pool
+		///status           int32            //是否已经完成注册
 		middleware       []MiddlewareFunc //中间件
 		Binder           binder.Interface //默认序列化方式
 		Render           Render
@@ -54,32 +54,30 @@ var (
 	}
 )
 
-// Push creates an instance of Server.
-func NewServer() (e *Server) {
-	e = &Server{
+// New creates an instance of Server.
+func New(ctx context.Context) (s *Server) {
+	s = &Server{
+		SCC:      scc.New(ctx),
 		pool:     sync.Pool{},
 		Binder:   binder.New(binder.MIMEJSON),
 		Server:   new(http.Server),
 		Router:   registry.NewRouter(),
 		Registry: registry.New(nil),
 	}
-	e.Server.Handler = e
-	//e.SessionDataType = defaultSessionDataType
-	e.RequestDataType = defaultRequestDataType
-	e.HTTPErrorHandler = e.DefaultHTTPErrorHandler
-	//e.Binder = &DefaultBinder{}
-	e.pool.New = func() interface{} {
-		return NewContext(e)
+	s.Server.Handler = s
+	s.RequestDataType = defaultRequestDataType
+	s.HTTPErrorHandler = s.DefaultHTTPErrorHandler
+	s.pool.New = func() interface{} {
+		return NewContext(s)
 	}
-	//e.Router = NewRouter()
 	return
 }
 
 // DefaultHTTPErrorHandler is the default HTTP error handler. It sends a JSON Response
 // with status code.
-func (s *Server) DefaultHTTPErrorHandler(c *Context, err error) {
-	he, ok := err.(*HTTPError)
-	if !ok {
+func (srv *Server) DefaultHTTPErrorHandler(c *Context, err error) {
+	he := &HTTPError{}
+	if !errors.As(err, he) {
 		he = NewHTTPError(http.StatusInternalServerError, err)
 	}
 	c.WriteHeader(he.Code)
@@ -92,41 +90,41 @@ func (s *Server) DefaultHTTPErrorHandler(c *Context, err error) {
 }
 
 // Use adds middleware to the chain which is run after Router.
-func (s *Server) Use(middleware ...MiddlewareFunc) {
-	s.middleware = append(s.middleware, middleware...)
+func (srv *Server) Use(middleware ...MiddlewareFunc) {
+	srv.middleware = append(srv.middleware, middleware...)
 }
 
 // GET registers a new GET Register for a path with matching handler in the Router
 // with optional Register-level middleware.
-func (s *Server) GET(path string, h HandlerFunc) {
-	s.Register(path, h, http.MethodGet)
+func (srv *Server) GET(path string, h HandlerFunc) {
+	srv.Register(path, h, http.MethodGet)
 }
 
 // POST registers a new POST Register for a path with matching handler in the
 // Router with optional Register-level middleware.
-func (s *Server) POST(path string, h HandlerFunc) {
-	s.Register(path, h, http.MethodPost)
+func (srv *Server) POST(path string, h HandlerFunc) {
+	srv.Register(path, h, http.MethodPost)
 }
 
 // 代理服务器
-func (s *Server) Proxy(prefix, address string, method ...string) *Proxy {
+func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
 	proxy := NewProxy(address)
-	proxy.Route(s, prefix, method...)
+	proxy.Route(srv, prefix, method...)
 	return proxy
 }
 
 // Static registers a new Register with path prefix to serve static files from the
 // provided root directory.
 // 如果root 不是绝对路径 将以程序的WorkDir为根目录
-func (s *Server) Static(prefix, root string, method ...string) *Static {
+func (srv *Server) Static(prefix, root string, method ...string) *Static {
 	static := NewStatic(root)
-	static.Route(s, prefix, method...)
+	static.Route(srv, prefix, method...)
 	return static
 }
 
 // Service 使用Registry的Service批量注册struct
-func (this *Server) Service(name string, handler ...interface{}) *registry.Service {
-	service := this.Registry.Service(name)
+func (srv *Server) Service(name string, handler ...interface{}) *registry.Service {
+	service := srv.Registry.Service(name)
 	if service.Handler == nil {
 		service.Handler = &Handler{}
 	}
@@ -140,128 +138,127 @@ func (this *Server) Service(name string, handler ...interface{}) *registry.Servi
 
 // Register AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
-func (s *Server) Register(route string, handler HandlerFunc, method ...string) {
+func (srv *Server) Register(route string, handler HandlerFunc, method ...string) {
 	if len(method) == 0 {
 		method = []string{http.MethodGet, http.MethodPost}
 	}
 	for _, m := range method {
-		_ = s.Router.Register(handler, strings.ToUpper(m), route)
+		_ = srv.Router.Register(handler, strings.ToUpper(m), route)
 	}
 }
 
 // Acquire returns an empty `Context` instance from the pool.
 // You must return the Context by calling `ReleaseContext()`.
-func (s *Server) Acquire(w http.ResponseWriter, r *http.Request) *Context {
-	c := s.pool.Get().(*Context)
+func (srv *Server) Acquire(w http.ResponseWriter, r *http.Request) *Context {
+	c := srv.pool.Get().(*Context)
 	c.reset(w, r)
 	return c
 }
 
 // Release returns the `Context` instance back to the pool.
 // You must call it after `AcquireContext()`.
-func (s *Server) Release(c *Context) {
+func (srv *Server) Release(c *Context) {
 	c.release()
-	s.pool.Put(c)
+	srv.pool.Put(c)
 }
 
 // ServeHTTP implements `http.Handler` interface, which serves HTTP requests.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := s.Acquire(w, r)
+func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	srv.SCC.Add(1)
+	defer srv.SCC.Done()
+	c := srv.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
-			s.HTTPErrorHandler(c, NewHTTPError500(e))
+			srv.HTTPErrorHandler(c, NewHTTPError500(e))
 		}
-		s.Release(c)
+		srv.Release(c)
 	}()
 
-	if scc.Stopped() {
-		s.HTTPErrorHandler(c, errors.New("server stopped"))
+	if srv.SCC.Stopped() {
+		srv.HTTPErrorHandler(c, errors.New("server stopped"))
 		return
 	}
-
-	if err, ok := c.doMiddleware(s.middleware); err != nil {
-		s.HTTPErrorHandler(c, err)
+	if err, ok := c.doMiddleware(srv.middleware); err != nil {
+		srv.HTTPErrorHandler(c, err)
 		return
 	} else if !ok {
 		return
 	}
 
-	nodes := s.Router.Match(c.Request.Method, c.Request.URL.Path)
+	nodes := srv.Router.Match(c.Request.Method, c.Request.URL.Path)
 	err := c.doHandle(nodes)
 	if err != nil {
-		s.HTTPErrorHandler(c, err)
+		srv.HTTPErrorHandler(c, err)
 	} else if c.aborted == 0 {
-		s.HTTPErrorHandler(c, ErrNotFound) //所有备选路由都放弃执行
+		srv.HTTPErrorHandler(c, ErrNotFound) //所有备选路由都放弃执行
 	}
 }
 
 // Start starts an HTTP server.
-func (s *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
-	s.register()
-	s.Server.Addr = address
+func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
+	srv.register()
+	srv.Server.Addr = address
 	if len(tlsConfig) > 0 {
-		s.Server.TLSConfig = tlsConfig[0]
+		srv.Server.TLSConfig = tlsConfig[0]
 	}
 	//启动服务
-	err = scc.Timeout(time.Second, func() error {
-		if s.Server.TLSConfig != nil {
-			return s.Server.ListenAndServeTLS("", "")
+	err = srv.SCC.Timeout(time.Second, func() error {
+		if srv.Server.TLSConfig != nil {
+			return srv.Server.ListenAndServeTLS("", "")
 		} else {
-			return s.Server.ListenAndServe()
+			return srv.Server.ListenAndServe()
 		}
 	})
-	if err == scc.ErrorTimeout {
+	if errors.Is(err, scc.ErrorTimeout) {
 		err = nil
 	}
 	return
 }
 
-func (s *Server) Close() {
-	if !atomic.CompareAndSwapInt32(&s.status, 1, 0) {
-		return
+func (srv *Server) Close() error {
+	if !srv.SCC.Cancel() {
+		return nil
 	}
-	_ = s.Server.Shutdown(context.Background())
+	if err := srv.SCC.Wait(time.Second); err != nil {
+		return err
+	}
+	_ = srv.Server.Shutdown(context.Background())
 	_ = session.Close()
-	scc.Done()
+	return nil
 }
 
-func (s *Server) Listener(ln net.Listener) (err error) {
-	s.register()
-	//s.Server = &http.Server{Handler: cors.Default().Handler(s)}
-	//s.Server.Handler =cors.Default().Handler(s)
+func (srv *Server) Listener(ln net.Listener) (err error) {
+	srv.register()
 	//启动服务
-	err = scc.Timeout(time.Second, func() error {
-		return s.Server.Serve(ln)
+	err = srv.SCC.Timeout(time.Second, func() error {
+		return srv.Server.Serve(ln)
 	})
-	if err == scc.ErrorTimeout {
+	if errors.Is(err, scc.ErrorTimeout) {
 		err = nil
 	}
 	return
 }
 
 // register 注册所有 service
-func (s *Server) register() {
-	if !atomic.CompareAndSwapInt32(&s.status, 0, 1) {
+func (srv *Server) register() {
+	if !srv.SCC.Stopped() {
 		return
 	}
-	scc.Add(1)
-	scc.CGO(s.heartbeat)
-	//scc.Add(1)
-	s.Registry.Nodes(func(node *registry.Node) bool {
+	srv.Registry.Nodes(func(node *registry.Node) bool {
 		if handler, ok := node.Service.Handler.(*Handler); ok {
 			path := registry.Join(node.Service.Name(), node.Name())
-			s.Register(path, handler.closure(node), handler.method...)
+			srv.Register(path, handler.closure(node), handler.method...)
 		}
 		return true
 	})
 }
 
-func (this *Server) heartbeat(ctx context.Context) {
-	defer this.Close()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		}
-	}
-}
+//func (this *Server) heartbeat(ctx context.Context) {
+//	defer this.Close()
+//	for {
+//		select {
+//		case <-ctx.Done():
+//			return
+//		}
+//	}
+//}
