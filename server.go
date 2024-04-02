@@ -77,7 +77,7 @@ func New(ctx context.Context) (s *Server) {
 // with status code.
 func (srv *Server) DefaultHTTPErrorHandler(c *Context, err error) {
 	he := &HTTPError{}
-	if !errors.As(err, he) {
+	if !errors.As(err, &he) {
 		he = NewHTTPError(http.StatusInternalServerError, err)
 	}
 	c.WriteHeader(he.Code)
