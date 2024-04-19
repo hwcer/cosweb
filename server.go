@@ -215,6 +215,18 @@ func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 	return
 }
 
+func (srv *Server) Listen(ln net.Listener) (err error) {
+	srv.register()
+	//启动服务
+	err = srv.SCC.Timeout(time.Second, func() error {
+		return srv.Server.Serve(ln)
+	})
+	if errors.Is(err, scc.ErrorTimeout) {
+		err = nil
+	}
+	return
+}
+
 func (srv *Server) Close() error {
 	if !srv.SCC.Cancel() {
 		return nil
@@ -225,18 +237,6 @@ func (srv *Server) Close() error {
 	_ = srv.Server.Shutdown(context.Background())
 	_ = session.Close()
 	return nil
-}
-
-func (srv *Server) Listener(ln net.Listener) (err error) {
-	srv.register()
-	//启动服务
-	err = srv.SCC.Timeout(time.Second, func() error {
-		return srv.Server.Serve(ln)
-	})
-	if errors.Is(err, scc.ErrorTimeout) {
-		err = nil
-	}
-	return
 }
 
 // register 注册所有 service
@@ -252,13 +252,3 @@ func (srv *Server) register() {
 		return true
 	})
 }
-
-//func (this *Server) heartbeat(ctx context.Context) {
-//	defer this.Close()
-//	for {
-//		select {
-//		case <-ctx.Done():
-//			return
-//		}
-//	}
-//}
