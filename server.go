@@ -13,15 +13,16 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		SCC  *scc.SCC
-		pool sync.Pool
-		///status           int32            //是否已经完成注册
+		SCC              *scc.SCC
+		pool             sync.Pool
+		status           int32            //是否已经完成注册
 		middleware       []MiddlewareFunc //中间件
 		Binder           binder.Interface //默认序列化方式
 		Render           Render
@@ -196,7 +197,9 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Start starts an HTTP server.
 func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
-	srv.register()
+	if err = srv.register(); err != nil {
+		return err
+	}
 	srv.Server.Addr = address
 	if len(tlsConfig) > 0 {
 		srv.Server.TLSConfig = tlsConfig[0]
@@ -216,7 +219,9 @@ func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 }
 
 func (srv *Server) Listen(ln net.Listener) (err error) {
-	srv.register()
+	if err = srv.register(); err != nil {
+		return err
+	}
 	//启动服务
 	err = srv.SCC.Timeout(time.Second, func() error {
 		return srv.Server.Serve(ln)
@@ -240,9 +245,9 @@ func (srv *Server) Close() error {
 }
 
 // register 注册所有 service
-func (srv *Server) register() {
-	if !srv.SCC.Stopped() {
-		return
+func (srv *Server) register() error {
+	if !atomic.CompareAndSwapInt32(&srv.status, 0, 1) {
+		return errors.New("server already running")
 	}
 	srv.Registry.Nodes(func(node *registry.Node) bool {
 		if handler, ok := node.Service.Handler.(*Handler); ok {
@@ -251,4 +256,5 @@ func (srv *Server) register() {
 		}
 		return true
 	})
+	return nil
 }
