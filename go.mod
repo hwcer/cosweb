@@ -3,10 +3,10 @@ module github.com/hwcer/cosweb
 go 1.21.5
 
 require (
-	github.com/hwcer/cosgo v1.0.3
+	github.com/hwcer/cosgo v1.0.5
 	github.com/hwcer/logger v0.0.5
 	github.com/hwcer/registry v0.0.6
-	github.com/hwcer/scc v0.0.4
+	github.com/hwcer/scc v0.0.6
 	github.com/hwcer/schema v0.0.3 // indirect
 )
 
