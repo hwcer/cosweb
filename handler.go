@@ -112,6 +112,9 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply interface{}, er
 	return
 }
 func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
+	if !c.Writable() {
+		return nil
+	}
 	if this.serialize != nil {
 		reply, err = this.serialize(c, reply)
 	}

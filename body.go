@@ -21,6 +21,9 @@ type Body struct {
 
 func (this *Body) reset(req *http.Request) {
 	ct := req.Header.Get(HeaderContentType)
+	if ct == "" {
+		ct = ContentTypeApplicationJSON
+	}
 	this.binder = binder.Handle(ct)
 	if this.binder == nil {
 		return
