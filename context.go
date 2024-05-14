@@ -170,7 +170,10 @@ func (c *Context) Get(key string, dts ...RequestDataType) interface{} {
 	}
 	return ""
 }
-func (c *Context) GetInt(key string, dts ...RequestDataType) (r int64) {
+func (c *Context) GetInt(key string, dts ...RequestDataType) (r int) {
+	return int(c.GetInt64(key, dts...))
+}
+func (c *Context) GetInt64(key string, dts ...RequestDataType) (r int64) {
 	v := c.Get(key, dts...)
 	if v == nil {
 		return 0
@@ -191,7 +194,9 @@ func (c *Context) GetInt(key string, dts ...RequestDataType) (r int64) {
 	}
 	return
 }
-
+func (c *Context) GetInt32(key string, dts ...RequestDataType) (r int32) {
+	return int32(c.GetInt64(key, dts...))
+}
 func (c *Context) GetFloat(key string, dts ...RequestDataType) (r float64) {
 	v := c.Get(key, dts...)
 	if v == nil {
