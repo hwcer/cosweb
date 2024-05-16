@@ -1,14 +1,16 @@
 package session
 
-import "errors"
+import (
+	"github.com/hwcer/cosgo/values"
+)
 
 var (
-	ErrorStorageNotSet     = errors.New("session storage not set")
-	ErrorSessionIdEmpty    = errors.New("session id empty")
-	ErrorSessionLocked     = errors.New("session locked")
-	ErrorSessionTypeError  = errors.New("session type error")
-	ErrorSessionNotExist   = errors.New("session not exist")
-	ErrorSessionTypeExpire = errors.New("session expire")
-	ErrorSessionIllegal    = errors.New("session illegal")
-	ErrorSessionUnknown    = errors.New("session unknown error")
+	ErrorStorageNotSet     = values.Errorf(201, "session storage not set")
+	ErrorSessionIdEmpty    = values.Errorf(202, "session id empty")
+	ErrorSessionLocked     = values.Errorf(203, "session locked")
+	ErrorSessionTypeError  = values.Errorf(204, "session type error")
+	ErrorSessionNotExist   = values.Errorf(205, "session not exist")
+	ErrorSessionTypeExpire = values.Errorf(206, "session expire")
+	ErrorSessionIllegal    = values.Errorf(207, "session illegal")
+	ErrorSessionUnknown    = values.Errorf(208, "session unknown error")
 )
