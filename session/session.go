@@ -17,12 +17,11 @@ func New() *Session {
 }
 
 type Session struct {
-	//key    string
+	values.Values
 	uuid   string //store key
 	token  string //session id
 	dirty  []string
 	locked bool
-	values values.Values
 }
 
 func (this *Session) Start(token string, level StartType) (err error) {
@@ -42,9 +41,9 @@ func (this *Session) Start(token string, level StartType) (err error) {
 		lock = true
 	}
 
-	if this.uuid, this.values, err = Options.storage.Get(this.token, lock); err != nil {
+	if this.uuid, this.Values, err = Options.storage.Get(this.token, lock); err != nil {
 		return err
-	} else if this.values == nil {
+	} else if this.Values == nil {
 		return ErrorSessionNotExist
 	}
 	if lock {
@@ -57,43 +56,18 @@ func (this *Session) UUID() string {
 	return this.uuid
 }
 
-func (this *Session) Get(key string) (v interface{}) {
-	if this.values != nil {
-		v = this.values.Get(key)
-	}
-	return
-}
-func (this *Session) GetInt32(key string) (v int32) {
-	if this.values != nil {
-		v = this.values.GetInt32(key)
-	}
-	return
-}
-func (this *Session) GetInt64(key string) (v int64) {
-	if this.values != nil {
-		v = this.values.GetInt64(key)
-	}
-	return
-}
-func (this *Session) GetString(key string) (v string) {
-	if this.values != nil {
-		v = this.values.GetString(key)
-	}
-	return
-}
-
 func (this *Session) Set(key string, val interface{}) bool {
-	if this.values == nil {
+	if this.Values == nil {
 		return false
 	}
 	this.dirty = append(this.dirty, key)
-	this.values[key] = val
+	this.Values[key] = val
 	return true
 }
 
 func (this *Session) All() values.Values {
-	data := make(values.Values, len(this.values))
-	for k, v := range this.values {
+	data := make(values.Values, len(this.Values))
+	for k, v := range this.Values {
 		data.Set(k, v)
 	}
 	return data
@@ -110,7 +84,7 @@ func (this *Session) Create(uuid string, data values.Values) (token string, err 
 		return "", err
 	}
 	this.uuid = uuid
-	this.values = data
+	this.Values = data
 	this.locked = true
 	return this.token, nil
 }
@@ -133,7 +107,7 @@ func (this *Session) Release() {
 	}
 	data := make(values.Values)
 	for _, k := range this.dirty {
-		data[k] = this.values[k]
+		data[k] = this.Values[k]
 	}
 	_ = Options.storage.Save(this.token, data, Options.MaxAge, this.locked)
 	this.release()
@@ -144,5 +118,5 @@ func (this *Session) release() {
 	this.token = ""
 	this.dirty = nil
 	this.locked = false
-	this.values = nil
+	this.Values = nil
 }
