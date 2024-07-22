@@ -37,17 +37,21 @@ func NewContext(s *Server) *Context {
 	c := &Context{
 		engine: s,
 	}
-	c.Body = NewBody()
+	c.Body = NewBody(c)
 	c.Cookie = NewCookie(c)
 	c.Session = session.New()
 	return c
 }
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
-	c.Binder = c.engine.Binder
+	ct := r.Header.Get(HeaderContentType)
+	c.Binder = binder.Get(ct)
+	if c.Binder == nil {
+		c.Binder = c.engine.Binder
+	}
 	c.Request = r
 	c.Response = w
-	c.Body.reset(r)
+	c.Body.reset()
 }
 
 // 释放资源,准备进入缓存池

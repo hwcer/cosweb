@@ -2,12 +2,16 @@ module github.com/hwcer/cosweb
 
 go 1.21.5
 
+
+replace (
+	github.com/hwcer/cosgo v1.0.7 => ../cosgo
+)
 require (
-	github.com/hwcer/cosgo v1.0.5
+	github.com/hwcer/cosgo v1.0.7
 	github.com/hwcer/logger v0.0.5
 	github.com/hwcer/registry v0.0.6
 	github.com/hwcer/scc v0.0.7
-	github.com/hwcer/schema v0.0.3 // indirect
+	github.com/hwcer/schema v0.0.4 // indirect
 )
 
 require (

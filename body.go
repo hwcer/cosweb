@@ -5,34 +5,36 @@ import (
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/values"
 	"io"
-	"net/http"
 )
 
-func NewBody() *Body {
-	return &Body{}
+func NewBody(c *Context) *Body {
+	return &Body{c: c}
 }
 
 type Body struct {
+	c      *Context
 	bytes  []byte
 	binder binder.Interface
 	values values.Values
-	//errors error
 }
 
-func (this *Body) reset(req *http.Request) {
-	ct := req.Header.Get(HeaderContentType)
-	if ct == "" {
-		ct = ContentTypeApplicationJSON
+func (this *Body) reset() {
+	req := this.c.Request
+	if this.c.Binder.String() == ContentTypeApplicationForm {
+		if len(req.Form) > 0 {
+			this.bytes = []byte(req.Form.Encode())
+		} else if len(req.PostForm) > 0 {
+			this.bytes = []byte(req.PostForm.Encode())
+		} else {
+			this.bytes = []byte(req.URL.RawQuery)
+		}
+	} else {
+		if err := this.readAll(req.Body); err != nil {
+			this.bytes = nil
+			return
+		}
+		req.Body = io.NopCloser(bytes.NewReader(this.bytes))
 	}
-	this.binder = binder.Handle(ct)
-	if this.binder == nil {
-		return
-	}
-	if err := this.readAll(req.Body); err != nil {
-		this.bytes = nil
-		return
-	}
-	req.Body = io.NopCloser(bytes.NewReader(this.bytes))
 }
 func (this *Body) release() {
 	this.binder = nil

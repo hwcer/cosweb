@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/hwcer/cosgo/random"
 	"github.com/hwcer/cosgo/utils"
 	"strings"
 )
@@ -41,7 +42,7 @@ func Encode(uid string) (sid string, err error) {
 		return Options.Token.Encode(uid)
 	}
 	var arr []string
-	arr = append(arr, utils.Random.String(ContextRandomStringLength))
+	arr = append(arr, random.Strings.String(ContextRandomStringLength))
 	arr = append(arr, uid)
 	str := strings.Join(arr, "")
 	return utils.Crypto.AESEncrypt(str, Options.Secret)
