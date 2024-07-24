@@ -44,11 +44,7 @@ func NewContext(s *Server) *Context {
 }
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
-	ct := r.Header.Get(HeaderContentType)
-	c.Binder = binder.Get(ct)
-	if c.Binder == nil {
-		c.Binder = c.engine.Binder
-	}
+	c.Binder = c.engine.Binder
 	c.Request = r
 	c.Response = w
 	c.Body.reset()

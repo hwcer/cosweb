@@ -20,14 +20,15 @@ type Body struct {
 
 func (this *Body) reset() {
 	req := this.c.Request
-	if this.c.Binder.String() == ContentTypeApplicationForm {
-		if len(req.Form) > 0 {
-			this.bytes = []byte(req.Form.Encode())
-		} else if len(req.PostForm) > 0 {
-			this.bytes = []byte(req.PostForm.Encode())
-		} else {
-			this.bytes = []byte(req.URL.RawQuery)
-		}
+	ct := this.c.Request.Header.Get(HeaderContentType)
+	this.binder = binder.Get(ct)
+	if this.binder == nil {
+		this.binder = this.c.engine.Binder
+	}
+	if ct == ContentTypeApplicationForm && len(req.Form) > 0 {
+		this.bytes = []byte(req.Form.Encode())
+	} else if ct == ContentTypeApplicationForm && len(req.PostForm) > 0 {
+		this.bytes = []byte(req.PostForm.Encode())
 	} else {
 		if err := this.readAll(req.Body); err != nil {
 			this.bytes = nil
@@ -36,8 +37,9 @@ func (this *Body) reset() {
 		req.Body = io.NopCloser(bytes.NewReader(this.bytes))
 	}
 }
+
 func (this *Body) release() {
-	this.binder = nil
+	//this.binder = nil
 	this.values = nil
 }
 
