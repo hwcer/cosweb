@@ -1,6 +1,7 @@
 package cosweb
 
 import (
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/logger"
 	"net/url"
 )
@@ -22,8 +23,8 @@ const (
 // 默认获取数据的顺序
 var defaultRequestDataType = RequestDataTypeMap{RequestDataTypeParam, RequestDataTypeQuery, RequestDataTypeBody, RequestDataTypeCookie}
 
-func (r RequestDataTypeMap) IndexOf(v RequestDataType) int {
-	for i, t := range r {
+func (r *RequestDataTypeMap) IndexOf(v RequestDataType) int {
+	for i, t := range *r {
 		if t == v {
 			return i
 		}
@@ -50,11 +51,7 @@ func getDataFromRequest(c *Context, key string, dataType RequestDataType) (inter
 	case RequestDataTypeQuery:
 		return getQueryValue(c, key)
 	case RequestDataTypeBody:
-		return c.Body.Get(key)
-	//case RequestDataTypeForm:
-	//	if v := c.Request.FormValue(key); v != "" {
-	//		return v, true
-	//	}
+		return getBodyValue(c, key)
 	case RequestDataTypeCookie:
 		if val, err := c.Request.Cookie(key); err == nil && val.Value != "" {
 			return val.Value, true
@@ -66,6 +63,28 @@ func getDataFromRequest(c *Context, key string, dataType RequestDataType) (inter
 	}
 	return "", false
 }
+func getBodyValue(c *Context, k string) (v any, ok bool) {
+	ct := c.ContentType()
+	//FORM
+	if ct == ContentTypeApplicationForm {
+		_ = c.Request.ParseForm()
+		if ok = c.Request.Form.Has(k); ok {
+			v = c.Request.Form.Get(k)
+		}
+		return
+	}
+	//JSON
+	if c.values == nil {
+		c.values = values.Values{}
+		if err := c.Bind(&c.values); err != nil {
+			logger.Debug("url.ParseQuery Err:%v", err)
+		}
+	}
+	if ok = c.values.Has(k); ok {
+		v = c.values.Get(k)
+	}
+	return
+}
 
 func getQueryValue(c *Context, key string) (v string, ok bool) {
 	if c.query == nil {
@@ -74,7 +93,6 @@ func getQueryValue(c *Context, key string) (v string, ok bool) {
 			logger.Debug("url.ParseQuery Err:%v", err)
 			c.query = make(url.Values)
 		}
-
 	}
 	if ok = c.query.Has(key); ok {
 		v = c.query.Get(key)

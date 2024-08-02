@@ -1,14 +1,17 @@
 package cosweb
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/hwcer/cosgo/binder"
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosweb/session"
 	"github.com/hwcer/registry"
+	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 )
 
@@ -19,14 +22,14 @@ const (
 
 // Context API上下文.
 type Context struct {
-	query    url.Values
 	route    []string
+	query    url.Values
 	params   map[string]string
+	values   values.Values
 	engine   *Server
 	aborted  int
-	Body     *Body
+	Body     *bytes.Buffer
 	Binder   binder.Interface
-	Cookie   *Cookie
 	Session  *session.Session
 	Request  *http.Request
 	Response http.ResponseWriter
@@ -37,8 +40,6 @@ func NewContext(s *Server) *Context {
 	c := &Context{
 		engine: s,
 	}
-	c.Body = NewBody(c)
-	c.Cookie = NewCookie(c)
 	c.Session = session.New()
 	return c
 }
@@ -47,19 +48,19 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Binder = c.engine.Binder
 	c.Request = r
 	c.Response = w
-	c.Body.reset()
+	//c.Body.reset()
 }
 
 // 释放资源,准备进入缓存池
 func (c *Context) release() {
-	c.query = nil
 	c.route = nil
+	c.query = nil
 	c.params = nil
+	c.values = nil
 	c.aborted = 0
+	c.Body = nil
 	c.Request = nil
 	c.Response = nil
-	c.Body.release()
-	c.Cookie.release()
 	c.Session.Release()
 }
 
@@ -156,6 +157,9 @@ func (c *Context) RemoteAddr() string {
 	ra, _, _ := net.SplitHostPort(c.Request.RemoteAddr)
 	return ra
 }
+func (c *Context) Cookie(cookie *http.Cookie) {
+	http.SetCookie(c, cookie)
+}
 
 // Get 获取参数,优先路径中的params
 // 其他方式直接使用c.Request...
@@ -178,21 +182,7 @@ func (c *Context) GetInt64(key string, dts ...RequestDataType) (r int64) {
 	if v == nil {
 		return 0
 	}
-	switch v.(type) {
-	case int:
-		r = int64(v.(int))
-	case int32:
-		r = int64(v.(int32))
-	case int64:
-		r = int64(v.(int64))
-	case float32:
-		r = int64(v.(float32))
-	case float64:
-		r = int64(v.(float64))
-	case string:
-		r, _ = strconv.ParseInt(v.(string), 10, 64)
-	}
-	return
+	return values.ParseInt64(v)
 }
 func (c *Context) GetInt32(key string, dts ...RequestDataType) (r int32) {
 	return int32(c.GetInt64(key, dts...))
@@ -202,21 +192,7 @@ func (c *Context) GetFloat(key string, dts ...RequestDataType) (r float64) {
 	if v == nil {
 		return 0
 	}
-	switch v.(type) {
-	case int:
-		r = float64(v.(int))
-	case int32:
-		r = float64(v.(int32))
-	case int64:
-		r = float64(v.(int64))
-	case float32:
-		r = float64(v.(float32))
-	case float64:
-		r = v.(float64)
-	case string:
-		r, _ = strconv.ParseFloat(v.(string), 10)
-	}
-	return
+	return values.ParseFloat64(v)
 }
 
 func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
@@ -233,7 +209,35 @@ func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
 	return
 }
 
+func (c *Context) ContentType() string {
+	t := c.Request.Header.Get(HeaderContentType)
+	ct, _, _ := mime.ParseMediaType(t)
+	return ct
+}
+
 // Bind 绑定JSON XML
-func (c *Context) Bind(i interface{}) error {
-	return c.Body.Bind(i)
+func (c *Context) Bind(i interface{}) (err error) {
+	ct := c.ContentType()
+	if ct == ContentTypeApplicationForm {
+		if err = c.Request.ParseForm(); err != nil {
+			return err
+		}
+		if c.Request.Form == nil {
+			return nil
+		}
+		return binder.Form.UnmarshalFromValues(c.Request.Form, i)
+	} else if ct == ContentTypeApplicationJSON {
+		if c.Body == nil {
+			c.Body = bytes.NewBuffer([]byte{})
+			if _, err = c.Body.ReadFrom(c.Request.Body); err != nil {
+				return err
+			}
+			c.Request.Body = io.NopCloser(c.Body)
+		}
+		if c.Body.Len() > 0 {
+			err = binder.Json.Unmarshal(c.Body.Bytes(), i)
+		}
+		return err
+	}
+	return nil
 }
