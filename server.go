@@ -20,7 +20,7 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		SCC              *scc.SCC
+		//SCC              *scc.SCC
 		pool             sync.Pool
 		status           int32            //是否已经完成注册
 		middleware       []MiddlewareFunc //中间件
@@ -56,9 +56,9 @@ var (
 )
 
 // New creates an instance of Server.
-func New(ctx context.Context) (s *Server) {
+func New() (s *Server) {
 	s = &Server{
-		SCC:      scc.New(ctx),
+		//SCC:      scc.New(ctx),
 		pool:     sync.Pool{},
 		Binder:   binder.New(binder.MIMEJSON),
 		Server:   new(http.Server),
@@ -165,8 +165,8 @@ func (srv *Server) Release(c *Context) {
 
 // ServeHTTP implements `http.Handler` interface, which serves HTTP requests.
 func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	srv.SCC.Add(1)
-	defer srv.SCC.Done()
+	scc.Add(1)
+	defer scc.Done()
 	c := srv.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
@@ -175,7 +175,7 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		srv.Release(c)
 	}()
 
-	if srv.SCC.Stopped() {
+	if scc.Stopped() {
 		srv.HTTPErrorHandler(c, errors.New("server stopped"))
 		return
 	}
@@ -205,7 +205,7 @@ func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 		srv.Server.TLSConfig = tlsConfig[0]
 	}
 	//启动服务
-	err = srv.SCC.Timeout(time.Second, func() error {
+	err = scc.Timeout(time.Second, func() error {
 		if srv.Server.TLSConfig != nil {
 			return srv.Server.ListenAndServeTLS("", "")
 		} else {
@@ -223,7 +223,7 @@ func (srv *Server) Listen(ln net.Listener) (err error) {
 		return err
 	}
 	//启动服务
-	err = srv.SCC.Timeout(time.Second, func() error {
+	err = scc.Timeout(time.Second, func() error {
 		return srv.Server.Serve(ln)
 	})
 	if errors.Is(err, scc.ErrorTimeout) {
@@ -233,10 +233,8 @@ func (srv *Server) Listen(ln net.Listener) (err error) {
 }
 
 func (srv *Server) Close() error {
-	if !srv.SCC.Cancel() {
-		return nil
-	}
-	if err := srv.SCC.Wait(time.Second); err != nil {
+	_ = scc.Cancel()
+	if err := scc.Wait(time.Second); err != nil {
 		return err
 	}
 	_ = srv.Server.Shutdown(context.Background())

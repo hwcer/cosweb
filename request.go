@@ -1,9 +1,7 @@
 package cosweb
 
 import (
-	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/logger"
-	"net/url"
 )
 
 type RequestDataType int
@@ -73,29 +71,23 @@ func getBodyValue(c *Context, k string) (v any, ok bool) {
 		}
 		return
 	}
-	//JSON
-	if c.values == nil {
-		c.values = values.Values{}
-		if err := c.Bind(&c.values); err != nil {
+	//JSON,xml...
+	if !c.unmarshal {
+		c.unmarshal = true
+		if err := c.Bind(&c.Values, true); err != nil {
 			logger.Debug("url.ParseQuery Err:%v", err)
 		}
 	}
-	if ok = c.values.Has(k); ok {
-		v = c.values.Get(k)
+	if ok = c.Values.Has(k); ok {
+		v = c.Values.Get(k)
 	}
 	return
 }
 
-func getQueryValue(c *Context, key string) (v string, ok bool) {
-	if c.query == nil {
-		var err error
-		if c.query, err = url.ParseQuery(c.Request.URL.RawQuery); err != nil {
-			logger.Debug("url.ParseQuery Err:%v", err)
-			c.query = make(url.Values)
-		}
-	}
-	if ok = c.query.Has(key); ok {
-		v = c.query.Get(key)
+func getQueryValue(c *Context, k string) (v string, ok bool) {
+	_ = c.Request.ParseForm()
+	if ok = c.Request.Form.Has(k); ok {
+		v = c.Request.Form.Get(k)
 	}
 	return
 }

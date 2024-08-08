@@ -11,7 +11,6 @@ import (
 	"mime"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -22,17 +21,16 @@ const (
 
 // Context API上下文.
 type Context struct {
-	route    []string
-	query    url.Values
-	params   map[string]string
-	values   values.Values
-	engine   *Server
-	aborted  int
-	Body     *bytes.Buffer
-	Binder   binder.Interface
-	Session  *session.Session
-	Request  *http.Request
-	Response http.ResponseWriter
+	route     []string
+	params    map[string]string
+	engine    *Server
+	aborted   int
+	unmarshal bool //json 格式下Values是否已经缓存过数据
+	Binder    binder.Interface
+	Values    values.Values
+	Session   *session.Session
+	Request   *http.Request
+	Response  http.ResponseWriter
 }
 
 // NewContext returns a Context instance.
@@ -46,19 +44,18 @@ func NewContext(s *Server) *Context {
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Binder = c.engine.Binder
+	c.Values = values.Values{}
 	c.Request = r
 	c.Response = w
-	//c.Body.reset()
 }
 
 // 释放资源,准备进入缓存池
 func (c *Context) release() {
 	c.route = nil
-	c.query = nil
 	c.params = nil
-	c.values = nil
 	c.aborted = 0
-	c.Body = nil
+	c.unmarshal = false
+	c.Values = nil
 	c.Request = nil
 	c.Response = nil
 	c.Session.Release()
@@ -216,7 +213,7 @@ func (c *Context) ContentType() string {
 }
 
 // Bind 绑定JSON XML
-func (c *Context) Bind(i interface{}) (err error) {
+func (c *Context) Bind(i any, multiplex ...bool) (err error) {
 	ct := c.ContentType()
 	if ct == ContentTypeApplicationForm {
 		if err = c.Request.ParseForm(); err != nil {
@@ -227,17 +224,25 @@ func (c *Context) Bind(i interface{}) (err error) {
 		}
 		return binder.Form.UnmarshalFromValues(c.Request.Form, i)
 	} else if ct == ContentTypeApplicationJSON {
-		if c.Body == nil {
-			c.Body = bytes.NewBuffer([]byte{})
-			if _, err = c.Body.ReadFrom(c.Request.Body); err != nil {
-				return err
-			}
-			c.Request.Body = io.NopCloser(c.Body)
+		var b *bytes.Buffer
+		if b, err = c.Body(multiplex...); err != nil {
+			return err
 		}
-		if c.Body.Len() > 0 {
-			err = binder.Json.Unmarshal(c.Body.Bytes(), i)
+		if b.Len() > 0 {
+			err = binder.Json.Decode(b, i)
+			b.Reset()
 		}
 		return err
 	}
-	return nil
+	return
+}
+func (c *Context) Body(multiplex ...bool) (b *bytes.Buffer, err error) {
+	b = bytes.NewBuffer([]byte{})
+	if _, err = b.ReadFrom(c.Request.Body); err != nil {
+		return
+	}
+	if len(multiplex) > 0 && multiplex[0] {
+		c.Request.Body = io.NopCloser(b)
+	}
+	return
 }
