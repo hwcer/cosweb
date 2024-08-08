@@ -41,7 +41,7 @@ func (r *RequestDataTypeMap) Reset(keys ...RequestDataType) {
 	*r = keys
 }
 
-func getDataFromRequest(c *Context, key string, dataType RequestDataType) (interface{}, bool) {
+func getDataFromRequest(c *Context, key string, dataType RequestDataType) (any, bool) {
 	switch dataType {
 	case RequestDataTypeParam:
 		v, ok := c.params[key]
@@ -62,18 +62,8 @@ func getDataFromRequest(c *Context, key string, dataType RequestDataType) (inter
 	return "", false
 }
 func getBodyValue(c *Context, k string) (v any, ok bool) {
-	ct := c.ContentType()
-	//FORM
-	if ct == ContentTypeApplicationForm {
-		_ = c.Request.ParseForm()
-		if ok = c.Request.Form.Has(k); ok {
-			v = c.Request.Form.Get(k)
-		}
-		return
-	}
-	//JSON,xml...
-	if !c.unmarshal {
-		c.unmarshal = true
+	if !c.body {
+		c.body = true
 		if err := c.Bind(&c.Values, true); err != nil {
 			logger.Debug("url.ParseQuery Err:%v", err)
 		}
@@ -85,9 +75,11 @@ func getBodyValue(c *Context, k string) (v any, ok bool) {
 }
 
 func getQueryValue(c *Context, k string) (v string, ok bool) {
-	_ = c.Request.ParseForm()
-	if ok = c.Request.Form.Has(k); ok {
-		v = c.Request.Form.Get(k)
+	if c.query == nil {
+		c.query = c.Request.URL.Query()
+	}
+	if ok = c.query.Has(k); ok {
+		v = c.query.Get(k)
 	}
 	return
 }

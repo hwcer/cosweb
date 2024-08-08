@@ -26,7 +26,7 @@ func (c *Context) Write(b []byte) (n int, err error) {
 	return
 }
 
-//Writable 是否可写，如果已经写入头则返回FALSE
+// Writable 是否可写，如果已经写入头则返回FALSE
 func (c *Context) Writable() bool {
 	return c.Response.Header().Get(HeaderContentType) == ""
 }
@@ -108,12 +108,12 @@ func (c *Context) Stream(contentType ContentType, r io.Reader) (err error) {
 	return
 }
 
-//Inline 最终走File
+// Inline 最终走File
 func (c *Context) Inline(file, name string) error {
 	return c.contentDisposition(file, name, "inline")
 }
 
-//Attachment 最终走File
+// Attachment 最终走File
 func (c *Context) Attachment(file, name string) error {
 	return c.contentDisposition(file, name, "attachment")
 }
@@ -147,13 +147,4 @@ func (c *Context) JSON(i interface{}) error {
 		return err
 	}
 	return c.Bytes(ContentTypeApplicationJSON, data)
-}
-
-func (c *Context) JSONP(callback string, i interface{}) error {
-	data, err := json.Marshal(i)
-	if err != nil {
-		return err
-	}
-	data = bytes.Join([][]byte{[]byte(callback), []byte("("), data, []byte(")")}, []byte{})
-	return c.Bytes(ContentTypeApplicationJS, data)
 }

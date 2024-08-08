@@ -8,9 +8,9 @@ import (
 	"github.com/hwcer/cosweb/session"
 	"github.com/hwcer/registry"
 	"io"
-	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -21,16 +21,17 @@ const (
 
 // Context API上下文.
 type Context struct {
-	route     []string
-	params    map[string]string
-	engine    *Server
-	aborted   int
-	unmarshal bool //json 格式下Values是否已经缓存过数据
-	Binder    binder.Interface
-	Values    values.Values
-	Session   *session.Session
-	Request   *http.Request
-	Response  http.ResponseWriter
+	body     bool
+	query    url.Values
+	route    []string
+	params   map[string]string
+	engine   *Server
+	aborted  int
+	Binder   binder.Interface
+	Values   values.Values
+	Session  *session.Session
+	Request  *http.Request
+	Response http.ResponseWriter
 }
 
 // NewContext returns a Context instance.
@@ -51,10 +52,11 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 
 // 释放资源,准备进入缓存池
 func (c *Context) release() {
+	c.body = false
+	c.query = nil
 	c.route = nil
 	c.params = nil
 	c.aborted = 0
-	c.unmarshal = false
 	c.Values = nil
 	c.Request = nil
 	c.Response = nil
@@ -206,42 +208,39 @@ func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
 	return
 }
 
-func (c *Context) ContentType() string {
-	t := c.Request.Header.Get(HeaderContentType)
-	ct, _, _ := mime.ParseMediaType(t)
-	return ct
-}
-
 // Bind 绑定JSON XML
 func (c *Context) Bind(i any, multiplex ...bool) (err error) {
-	ct := c.ContentType()
-	if ct == ContentTypeApplicationForm {
-		if err = c.Request.ParseForm(); err != nil {
-			return err
-		}
-		if c.Request.Form == nil {
-			return nil
-		}
-		return binder.Form.UnmarshalFromValues(c.Request.Form, i)
-	} else if ct == ContentTypeApplicationJSON {
-		var b *bytes.Buffer
-		if b, err = c.Body(multiplex...); err != nil {
-			return err
-		}
-		if b.Len() > 0 {
-			err = binder.Json.Decode(b, i)
-			b.Reset()
-		}
+	t := c.Request.Header.Get(HeaderContentType)
+	encoder := binder.Get(t)
+	if encoder == nil {
+		return values.Errorf(0, "unknown content type: %s", t)
+	}
+	var b *bytes.Buffer
+	if b, err = c.Buffer(multiplex...); err != nil {
 		return err
 	}
-	return
+	if b.Len() > 0 {
+		err = encoder.Decode(b, i)
+		b.Reset()
+	}
+	return err
 }
-func (c *Context) Body(multiplex ...bool) (b *bytes.Buffer, err error) {
+
+// Buffer 获取绑定body bytes
+func (c *Context) Buffer(multiplex ...bool) (b *bytes.Buffer, err error) {
 	b = bytes.NewBuffer([]byte{})
-	if _, err = b.ReadFrom(c.Request.Body); err != nil {
+	var n int64
+	n, err = b.ReadFrom(c.Request.Body)
+	if err != nil {
 		return
 	}
-	if len(multiplex) > 0 && multiplex[0] {
+	if n == 0 {
+		//form query
+		if t := c.Request.Header.Get(HeaderContentType); strings.HasPrefix(strings.ToLower(t), binder.MIMEPOSTForm) {
+			b.WriteString(c.Request.URL.RawQuery)
+		}
+	}
+	if n > 0 && len(multiplex) > 0 && multiplex[0] {
 		c.Request.Body = io.NopCloser(b)
 	}
 	return
