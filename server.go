@@ -234,9 +234,6 @@ func (srv *Server) Listen(ln net.Listener) (err error) {
 
 func (srv *Server) Close() error {
 	_ = scc.Cancel()
-	if err := scc.Wait(time.Second); err != nil {
-		return err
-	}
 	_ = srv.Server.Shutdown(context.Background())
 	_ = session.Close()
 	return nil
