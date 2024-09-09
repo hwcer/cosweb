@@ -70,11 +70,11 @@ func (c *Context) Bytes(contentType ContentType, b []byte) (err error) {
 	return
 }
 func (c *Context) Render(name string, data interface{}) (err error) {
-	if c.engine.Render == nil {
+	if c.Server.Render == nil {
 		return ErrRendererNotRegistered
 	}
 	buf := new(bytes.Buffer)
-	if err = c.engine.Render.Render(buf, name, data); err != nil {
+	if err = c.Server.Render.Render(buf, name, data); err != nil {
 		return
 	}
 	return c.Bytes(ContentTypeTextHTML, buf.Bytes())

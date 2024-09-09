@@ -31,7 +31,7 @@ const (
 	HeaderXRealIP             = "X-Real-Addr"
 	HeaderXRequestID          = "X-Request-Index"
 	HeaderXRequestedWith      = "X-Requested-With"
-	HeaderServer              = "engine"
+	HeaderServer              = "Server"
 	HeaderOrigin              = "origin"
 
 	// Access control

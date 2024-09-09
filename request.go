@@ -1,18 +1,15 @@
 package cosweb
 
-import (
-	"github.com/hwcer/logger"
-)
-
 type RequestDataType int
 type RequestDataTypeMap []RequestDataType
 
 const (
-	RequestDataTypeParam  RequestDataType = iota //params
-	RequestDataTypeBody                          //POST json, xml,pb,form....
-	RequestDataTypeQuery                         //GET
-	RequestDataTypeCookie                        //COOKIES
-	RequestDataTypeHeader                        //HEADER
+	RequestDataTypeParam   RequestDataType = iota //params
+	RequestDataTypeBody                           //POST json, xml,pb,form....
+	RequestDataTypeQuery                          //GET
+	RequestDataTypeCookie                         //COOKIES
+	RequestDataTypeHeader                         //HEADER
+	RequestDataTypeContext                        //context 上下文数据，必须先c.Set(k ,v)
 )
 
 // 默认session id获取方式
@@ -58,18 +55,16 @@ func getDataFromRequest(c *Context, key string, dataType RequestDataType) (any, 
 		if v := c.Request.Header.Get(key); v != "" {
 			return v, true
 		}
+	case RequestDataTypeContext:
+		v, ok := c.context[key]
+		return v, ok
 	}
 	return "", false
 }
 func getBodyValue(c *Context, k string) (v any, ok bool) {
-	if !c.body {
-		c.body = true
-		if err := c.Bind(&c.Values, true); err != nil {
-			logger.Debug("url.ParseQuery Err:%v", err)
-		}
-	}
-	if ok = c.Values.Has(k); ok {
-		v = c.Values.Get(k)
+	vs := c.Values()
+	if ok = vs.Has(k); ok {
+		v = vs.Get(k)
 	}
 	return
 }

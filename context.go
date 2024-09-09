@@ -7,7 +7,6 @@ import (
 	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/cosweb/session"
 	"github.com/hwcer/registry"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,14 +20,15 @@ const (
 
 // Context API上下文.
 type Context struct {
-	body     bool
+	body     []byte
 	query    url.Values
 	route    []string
 	params   map[string]string
-	engine   *Server
+	values   values.Values
+	context  map[string]any //临时设置数据
 	aborted  int
+	Server   *Server
 	Binder   binder.Interface
-	Values   values.Values
 	Session  *session.Session
 	Request  *http.Request
 	Response http.ResponseWriter
@@ -37,27 +37,27 @@ type Context struct {
 // NewContext returns a Context instance.
 func NewContext(s *Server) *Context {
 	c := &Context{
-		engine: s,
+		Server: s,
 	}
 	c.Session = session.New()
 	return c
 }
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
-	c.Binder = c.engine.Binder
-	c.Values = values.Values{}
+	c.Binder = c.Server.Binder
 	c.Request = r
 	c.Response = w
 }
 
 // 释放资源,准备进入缓存池
 func (c *Context) release() {
-	c.body = false
+	c.body = nil
 	c.query = nil
 	c.route = nil
 	c.params = nil
+	c.values = nil
+	c.context = nil
 	c.aborted = 0
-	c.Values = nil
 	c.Request = nil
 	c.Response = nil
 	c.Session.Release()
@@ -160,11 +160,18 @@ func (c *Context) Cookie(cookie *http.Cookie) {
 	http.SetCookie(c, cookie)
 }
 
+func (c *Context) Set(key string, val any) {
+	if c.context == nil {
+		c.context = make(map[string]any)
+	}
+	c.context[key] = val
+}
+
 // Get 获取参数,优先路径中的params
 // 其他方式直接使用c.Request...
 func (c *Context) Get(key string, dts ...RequestDataType) interface{} {
 	if len(dts) == 0 {
-		dts = c.engine.RequestDataType
+		dts = c.Server.RequestDataType
 	}
 	for _, t := range dts {
 		if v, ok := getDataFromRequest(c, key, t); ok {
@@ -208,40 +215,49 @@ func (c *Context) GetString(key string, dts ...RequestDataType) (r string) {
 	return
 }
 
+func (c *Context) Values() values.Values {
+	if c.values == nil {
+		c.values = values.Values{}
+		_ = c.Bind(&c.values)
+	}
+	return c.values
+}
+
 // Bind 绑定JSON XML
-func (c *Context) Bind(i any, multiplex ...bool) (err error) {
+func (c *Context) Bind(i any) (err error) {
 	t := c.Request.Header.Get(HeaderContentType)
 	encoder := binder.Get(t)
 	if encoder == nil {
 		return values.Errorf(0, "unknown content type: %s", t)
 	}
 	var b *bytes.Buffer
-	if b, err = c.Buffer(multiplex...); err != nil {
+	if b, err = c.Buffer(); err != nil {
 		return err
 	}
 	if b.Len() > 0 {
-		err = encoder.Decode(b, i)
-		b.Reset()
+		err = encoder.Unmarshal(b.Bytes(), i)
 	}
 	return err
 }
 
 // Buffer 获取绑定body bytes
-func (c *Context) Buffer(multiplex ...bool) (b *bytes.Buffer, err error) {
+func (c *Context) Buffer() (b *bytes.Buffer, err error) {
+	if c.body != nil {
+		return bytes.NewBuffer(c.body), nil
+	}
 	b = bytes.NewBuffer([]byte{})
+	defer func() {
+		c.body = b.Bytes()
+	}()
 	var n int64
 	n, err = b.ReadFrom(c.Request.Body)
 	if err != nil {
 		return
 	}
 	if n == 0 {
-		//form query
 		if t := c.Request.Header.Get(HeaderContentType); strings.HasPrefix(strings.ToLower(t), binder.MIMEPOSTForm) {
 			b.WriteString(c.Request.URL.RawQuery)
 		}
-	}
-	if n > 0 && len(multiplex) > 0 && multiplex[0] {
-		c.Request.Body = io.NopCloser(b)
 	}
 	return
 }
