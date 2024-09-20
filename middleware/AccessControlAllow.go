@@ -55,6 +55,7 @@ func (this *AccessControlAllow) Handle(c *cosweb.Context, next cosweb.Next) erro
 	}
 	if len(this.headers) > 0 {
 		header.Add("Access-Control-Allow-Headers", strings.Join(this.headers, ","))
+		header.Add("Access-Control-Expose-Headers", strings.Join(this.headers, ","))
 	}
 	if this.Credentials {
 		header.Set("Access-Control-Allow-Credentials", "true")
