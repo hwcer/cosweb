@@ -1,9 +1,5 @@
 package session
 
-import (
-	"github.com/hwcer/cosgo/values"
-)
-
 type StartType uint8
 
 const (
@@ -17,10 +13,10 @@ func New() *Session {
 }
 
 type Session struct {
-	values.Values
 	uuid   string //store key
+	data   Data
 	token  string //session id
-	dirty  []string
+	dirty  map[string]any
 	locked bool
 }
 
@@ -41,9 +37,9 @@ func (this *Session) Start(token string, level StartType) (err error) {
 		lock = true
 	}
 
-	if this.uuid, this.Values, err = Options.storage.Get(this.token, lock); err != nil {
+	if this.uuid, this.data, err = Options.storage.Get(this.token, lock); err != nil {
 		return err
-	} else if this.Values == nil {
+	} else if this.data == nil {
 		return ErrorSessionNotExist
 	}
 	if lock {
@@ -56,25 +52,30 @@ func (this *Session) UUID() string {
 	return this.uuid
 }
 
-func (this *Session) Set(key string, val interface{}) bool {
-	if this.Values == nil {
-		return false
+func (this *Session) Set(key string, val any) {
+	if this.data == nil {
+		return
 	}
-	this.dirty = append(this.dirty, key)
-	this.Values[key] = val
-	return true
+	if this.dirty == nil {
+		this.dirty = make(map[string]any)
+	}
+	this.dirty[key] = val
+	this.data.Set(key, val)
 }
 
-func (this *Session) All() values.Values {
-	data := make(values.Values, len(this.Values))
-	for k, v := range this.Values {
-		data.Set(k, v)
+func (this *Session) Get(k string) any {
+	if v, ok := this.dirty[k]; ok {
+		return v
 	}
-	return data
+	return this.data.Get(k)
+}
+
+func (this *Session) Values() Data {
+	return this.data
 }
 
 // Create 创建SESSION，uuid 用户唯一ID，可以检测是不是重复登录
-func (this *Session) Create(uuid string, data values.Values) (token string, err error) {
+func (this *Session) Create(uuid string, data Data) (token string, err error) {
 	if Options.storage == nil {
 		return "", ErrorStorageNotSet
 	}
@@ -84,7 +85,7 @@ func (this *Session) Create(uuid string, data values.Values) (token string, err 
 		return "", err
 	}
 	this.uuid = uuid
-	this.Values = data
+	this.data = data
 	this.locked = true
 	return this.token, nil
 }
@@ -105,18 +106,19 @@ func (this *Session) Release() {
 	if this.uuid == "" || this.token == "" {
 		return
 	}
-	data := make(values.Values)
-	for _, k := range this.dirty {
-		data[k] = this.Values[k]
-	}
-	_ = Options.storage.Save(this.token, data, Options.MaxAge, this.locked)
+	//data := make(values.Values)
+	//for _, k := range this.dirty {
+	//	data[k] = this.Values[k]
+	//}
+
+	_ = Options.storage.Save(this.token, this.dirty, Options.MaxAge, this.locked)
 	this.release()
 }
 
 func (this *Session) release() {
+	this.data = nil
 	this.uuid = ""
 	this.token = ""
 	this.dirty = nil
 	this.locked = false
-	this.Values = nil
 }

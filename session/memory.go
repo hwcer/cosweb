@@ -2,7 +2,6 @@ package session
 
 import (
 	"github.com/hwcer/cosgo/storage"
-	"github.com/hwcer/cosgo/values"
 	"time"
 )
 
@@ -39,7 +38,7 @@ func (this *Memory) get(token string) (*Setter, error) {
 	}
 }
 
-func (this *Memory) Get(token string, lock bool) (uuid string, result values.Values, err error) {
+func (this *Memory) Get(token string, lock bool) (uuid string, result Data, err error) {
 	var data *Setter
 	data, err = this.get(token)
 	if err != nil {
@@ -50,34 +49,22 @@ func (this *Memory) Get(token string, lock bool) (uuid string, result values.Val
 		return
 	}
 	uuid = data.uuid
-	vs, _ := data.Get().(values.Values)
-	result = make(values.Values)
-	for k, v := range vs {
-		result.Set(k, v)
-	}
+	result, _ = data.Get().(Data)
 	return
 }
 
-func (this *Memory) Save(token string, data values.Values, ttl int64, unlock bool) (err error) {
+func (this *Memory) Save(token string, data map[string]any, ttl int64, unlock bool) (err error) {
 	var setter *Setter
 	setter, err = this.get(token)
 	if err != nil {
 		return
 	}
 
-	vs, _ := setter.Get().(values.Values)
+	vs, _ := setter.Get().(Data)
 	if vs == nil {
 		return ErrorSessionTypeError
 	}
-
-	newData := make(values.Values)
-	for k, v := range vs {
-		newData.Set(k, v)
-	}
-	for k, v := range data {
-		newData.Set(k, v)
-	}
-	setter.Set(newData)
+	vs.Merge(data, true)
 
 	if ttl > 0 {
 		setter.Expire(ttl)
@@ -95,7 +82,7 @@ func (this *Memory) Delete(uuid string) error {
 // Create 创建新SESSION,返回SESSION Index
 // Create会自动设置有效期
 // Create新数据为锁定状态
-func (this *Memory) Create(uuid string, data values.Values, ttl int64, lock bool) (token string, err error) {
+func (this *Memory) Create(uuid string, data Data, ttl int64, lock bool) (token string, err error) {
 	d := this.Hash.Create(uuid, data)
 	setter, _ := d.(*Setter)
 	setter.uuid = uuid
