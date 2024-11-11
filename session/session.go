@@ -1,124 +1,88 @@
 package session
 
-type StartType uint8
-
-const (
-	StartTypeNone StartType = 0 //不需要验证登录
-	StartTypeAuth StartType = 1 //需要登录
-	StartTypeLock StartType = 2 //需要登录，并且锁定,用户级别防并发
-)
-
 func New() *Session {
 	return &Session{}
 }
 
 type Session struct {
-	uuid   string //store key
-	data   Data
-	token  string //session id
-	dirty  map[string]any
-	locked bool
+	*Player
+	dirty []string
 }
 
-func (this *Session) Start(token string, level StartType) (err error) {
+// Verify 验证TOKEN信息是否有效,并初始化session
+func (this *Session) Verify(token string) (err error) {
 	if Options.storage == nil {
 		return ErrorStorageNotSet
 	}
-	this.token = token
-	if level == StartTypeNone {
-		return nil
-	}
-	if this.token == "" {
+	if token == "" {
 		return ErrorSessionIdEmpty
 	}
-
-	var lock bool
-	if level == StartTypeLock {
-		lock = true
-	}
-
-	if this.uuid, this.data, err = Options.storage.Get(this.token, lock); err != nil {
+	if this.Player, err = Options.storage.Verify(token); err != nil {
 		return err
-	} else if this.data == nil {
+	} else if this.Player == nil {
 		return ErrorSessionNotExist
 	}
-	if lock {
-		this.locked = lock
+	if this.token != token {
+		return ErrorSessionReplaced
 	}
 	return nil
 }
 
-func (this *Session) UUID() string {
-	return this.uuid
-}
-
 func (this *Session) Set(key string, val any) {
-	if this.data == nil {
+	if this.Player == nil {
 		return
 	}
-	if this.dirty == nil {
-		this.dirty = make(map[string]any)
-	}
-	this.dirty[key] = val
-	this.data.Set(key, val)
+	this.Player.Set(key, val)
+	this.dirty = append(this.dirty, key)
 }
 
-func (this *Session) Get(k string) any {
-	if v, ok := this.dirty[k]; ok {
-		return v
+// Update 批量修改Session信息
+func (this *Session) Update(vs map[string]any) {
+	if this.Player == nil {
+		return
 	}
-	return this.data.Get(k)
-}
-
-func (this *Session) Values() Data {
-	return this.data
+	this.Player.Update(vs)
+	for k, _ := range vs {
+		this.dirty = append(this.dirty, k)
+	}
 }
 
 // Create 创建SESSION，uuid 用户唯一ID，可以检测是不是重复登录
-func (this *Session) Create(uuid string, data Data) (token string, err error) {
+func (this *Session) Create(uuid string, data map[string]any) (token string, err error) {
 	if Options.storage == nil {
 		return "", ErrorStorageNotSet
 	}
-
-	this.token, err = Options.storage.Create(uuid, data, Options.MaxAge, true)
-	if err != nil {
-		return "", err
+	if this.Player, err = Options.storage.Create(uuid, data, Options.MaxAge); err == nil {
+		token = this.Player.token
 	}
-	this.uuid = uuid
-	this.data = data
-	this.locked = true
-	return this.token, nil
+	return
 }
 
 func (this *Session) Delete() (err error) {
-	if Options.storage == nil || this.uuid == "" {
+	if Options.storage == nil || this.Player == nil {
 		return nil
 	}
-	if err = Options.storage.Delete(this.uuid); err != nil {
+	if err = Options.storage.Delete(this.Player); err != nil {
 		return
 	}
 	this.release()
 	return
 }
 
-// Release 释放 session 由HTTP SERVER
+// Release 释放 session 由HTTP SERVER 自动调用
 func (this *Session) Release() {
-	if this.uuid == "" || this.token == "" {
+	if this.Player == nil || len(this.dirty) == 0 {
 		return
 	}
-	//data := make(values.Values)
-	//for _, k := range this.dirty {
-	//	data[k] = this.Values[k]
-	//}
-
-	_ = Options.storage.Save(this.token, this.dirty, Options.MaxAge, this.locked)
+	dirty := map[string]any{}
+	for _, k := range this.dirty {
+		dirty[k] = this.Player.Get(k)
+	}
+	_ = Options.storage.Update(this.Player, dirty, Options.MaxAge)
 	this.release()
 }
 
 func (this *Session) release() {
-	this.data = nil
-	this.uuid = ""
-	this.token = ""
 	this.dirty = nil
-	this.locked = false
+	this.Player = nil
 }

@@ -156,9 +156,10 @@ func (c *Context) RemoteAddr() string {
 	ra, _, _ := net.SplitHostPort(c.Request.RemoteAddr)
 	return ra
 }
-func (c *Context) Cookie(cookie *http.Cookie) {
-	http.SetCookie(c, cookie)
-}
+
+//func (c *Context) Cookie(cookie *http.Cookie) {
+//	http.SetCookie(c, cookie)
+//}
 
 func (c *Context) Set(key string, val any) {
 	if c.context == nil {

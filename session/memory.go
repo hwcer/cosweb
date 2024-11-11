@@ -9,14 +9,14 @@ var Heartbeat int32 = 10 //心跳(S)
 
 func NewMemory() *Memory {
 	s := &Memory{
-		Hash: *storage.NewHash(1024),
+		Array: *storage.New(1024),
 	}
 	s.Array.NewSetter = NewSetter
 	return s
 }
 
 type Memory struct {
-	storage.Hash
+	storage.Array
 	stop chan struct{}
 }
 
@@ -30,68 +30,49 @@ func (this *Memory) Start() error {
 
 func (this *Memory) get(token string) (*Setter, error) {
 	mid := storage.MID(token)
-	if v, ok := this.Hash.Array.Get(mid); !ok {
+	if v, ok := this.Array.Get(mid); !ok {
 		return nil, ErrorSessionIllegal
 	} else {
-		data, _ := v.(*Setter)
-		return data, nil
+		return v.(*Setter), nil
 	}
 }
 
-func (this *Memory) Get(token string, lock bool) (uuid string, result Data, err error) {
-	var data *Setter
-	data, err = this.get(token)
-	if err != nil {
-		return
+func (this *Memory) Verify(token string) (p *Player, err error) {
+	var setter *Setter
+	if setter, err = this.get(token); err == nil {
+		p, _ = setter.Get().(*Player)
 	}
-	if lock && !data.Lock() {
-		err = ErrorSessionLocked
-		return
-	}
-	uuid = data.uuid
-	result, _ = data.Get().(Data)
 	return
 }
 
-func (this *Memory) Save(token string, data map[string]any, ttl int64, unlock bool) (err error) {
+// Update 更新信息，内存没事，共享Player信息已经更新过，仅仅设置过去时间
+func (this *Memory) Update(p *Player, data map[string]any, ttl int64) (err error) {
 	var setter *Setter
-	setter, err = this.get(token)
+	setter, err = this.get(p.token)
 	if err != nil {
 		return
 	}
-
-	vs, _ := setter.Get().(Data)
-	if vs == nil {
-		return ErrorSessionTypeError
-	}
-	vs.Merge(data, true)
-
 	if ttl > 0 {
 		setter.Expire(ttl)
 	}
-	if unlock {
-		setter.UnLock()
-	}
 	return
 }
-func (this *Memory) Delete(uuid string) error {
-	this.Hash.Delete(uuid)
+func (this *Memory) Delete(p *Player) error {
+	mid := storage.MID(p.token)
+	this.Array.Delete(mid)
 	return nil
 }
 
 // Create 创建新SESSION,返回SESSION Index
 // Create会自动设置有效期
 // Create新数据为锁定状态
-func (this *Memory) Create(uuid string, data Data, ttl int64, lock bool) (token string, err error) {
-	d := this.Hash.Create(uuid, data)
+func (this *Memory) Create(uuid string, data map[string]any, ttl int64) (p *Player, err error) {
+	d := this.Array.Create(nil)
 	setter, _ := d.(*Setter)
-	setter.uuid = uuid
-	token = string(setter.Id())
+	st := string(setter.Id())
+	p = NewPlayer(uuid, st, data)
 	if ttl > 0 {
 		setter.Expire(ttl)
-	}
-	if !lock {
-		setter.UnLock() //默认加锁
 	}
 	return
 }
@@ -123,14 +104,14 @@ func (this *Memory) worker() {
 
 func (this *Memory) clean() {
 	nowTime := time.Now().Unix()
-	var keys []string
-	this.Hash.Array.Range(func(item storage.Setter) bool {
+	var keys []storage.MID
+	this.Array.Range(func(item storage.Setter) bool {
 		if data, ok := item.(*Setter); ok && data.expire < nowTime {
-			keys = append(keys, data.uuid)
+			keys = append(keys, data.Id())
 		}
 		return true
 	})
 	if len(keys) > 0 {
-		this.Hash.Remove(keys...)
+		this.Remove(keys...)
 	}
 }
