@@ -71,6 +71,7 @@ func (this *Memory) Create(uuid string, data map[string]any, ttl int64) (p *Play
 	setter, _ := d.(*Setter)
 	st := string(setter.Id())
 	p = NewPlayer(uuid, st, data)
+	setter.Set(p)
 	if ttl > 0 {
 		setter.Expire(ttl)
 	}

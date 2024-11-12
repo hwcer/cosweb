@@ -26,16 +26,16 @@ type Handler struct {
 }
 
 func (h *Handler) Use(src interface{}) {
-	if v, ok := src.(HandlerCaller); ok {
+	if v, ok := src.(func(node *registry.Node, c *Context) (interface{}, error)); ok {
 		h.caller = v
 	}
-	if v, ok := src.(HandlerFilter); ok {
+	if v, ok := src.(func(node *registry.Node) bool); ok {
 		h.filter = v
 	}
-	if v, ok := src.(HandlerSerialize); ok {
+	if v, ok := src.(func(c *Context, reply interface{}) (interface{}, error)); ok {
 		h.serialize = v
 	}
-	if v, ok := src.(MiddlewareFunc); ok {
+	if v, ok := src.(func(*Context, Next) error); ok {
 		h.middleware = append(h.middleware, v)
 	}
 	if v, ok := src.([]string); ok {

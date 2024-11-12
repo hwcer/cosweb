@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	ErrorStorageNotSet     = values.Errorf(201, "session storage not set")
+	ErrorStorageNotSet     = values.Errorf(201, "session Storage not set")
 	ErrorSessionIdEmpty    = values.Errorf(202, "session id empty")
 	ErrorSessionLocked     = values.Errorf(203, "session locked")
 	ErrorSessionTypeError  = values.Errorf(204, "session type error")

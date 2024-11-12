@@ -11,13 +11,13 @@ type Session struct {
 
 // Verify 验证TOKEN信息是否有效,并初始化session
 func (this *Session) Verify(token string) (err error) {
-	if Options.storage == nil {
+	if Options.Storage == nil {
 		return ErrorStorageNotSet
 	}
 	if token == "" {
 		return ErrorSessionIdEmpty
 	}
-	if this.Player, err = Options.storage.Verify(token); err != nil {
+	if this.Player, err = Options.Storage.Verify(token); err != nil {
 		return err
 	} else if this.Player == nil {
 		return ErrorSessionNotExist
@@ -49,20 +49,20 @@ func (this *Session) Update(vs map[string]any) {
 
 // Create 创建SESSION，uuid 用户唯一ID，可以检测是不是重复登录
 func (this *Session) Create(uuid string, data map[string]any) (token string, err error) {
-	if Options.storage == nil {
+	if Options.Storage == nil {
 		return "", ErrorStorageNotSet
 	}
-	if this.Player, err = Options.storage.Create(uuid, data, Options.MaxAge); err == nil {
+	if this.Player, err = Options.Storage.Create(uuid, data, Options.MaxAge); err == nil {
 		token = this.Player.token
 	}
 	return
 }
 
 func (this *Session) Delete() (err error) {
-	if Options.storage == nil || this.Player == nil {
+	if Options.Storage == nil || this.Player == nil {
 		return nil
 	}
-	if err = Options.storage.Delete(this.Player); err != nil {
+	if err = Options.Storage.Delete(this.Player); err != nil {
 		return
 	}
 	this.release()
@@ -78,7 +78,7 @@ func (this *Session) Release() {
 	for _, k := range this.dirty {
 		dirty[k] = this.Player.Get(k)
 	}
-	_ = Options.storage.Update(this.Player, dirty, Options.MaxAge)
+	_ = Options.Storage.Update(this.Player, dirty, Options.MaxAge)
 	this.release()
 }
 

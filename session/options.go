@@ -18,7 +18,7 @@ var Options = struct {
 	Token   token  //token生成和解析方式
 	MaxAge  int64  //有效期(S)
 	Secret  string //16位秘钥
-	storage Storage
+	Storage Storage
 }{
 	Name:   "_cosweb_cookie_vars",
 	MaxAge: 3600,

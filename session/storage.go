@@ -18,16 +18,16 @@ type Storage interface {
 
 func Start(s Storage) error {
 	if s != nil {
-		Options.storage = s
+		Options.Storage = s
 	} else {
-		Options.storage = NewMemory()
+		Options.Storage = NewMemory()
 	}
-	return Options.storage.Start()
+	return Options.Storage.Start()
 }
 
 func Close() error {
-	if Options.storage != nil {
-		return Options.storage.Close()
+	if Options.Storage != nil {
+		return Options.Storage.Close()
 	} else {
 		return nil
 	}
