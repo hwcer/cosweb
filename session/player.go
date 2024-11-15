@@ -57,9 +57,15 @@ func (this *Player) Update(data map[string]any) {
 }
 
 func (this *Player) UUID() string {
+	if this == nil {
+		return ""
+	}
 	return this.uuid
 }
 
 func (this *Player) Token() string {
+	if this == nil {
+		return ""
+	}
 	return this.token
 }

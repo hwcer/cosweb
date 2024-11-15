@@ -94,7 +94,7 @@ func (this *Redis) Verify(token string) (p *Player, err error) {
 func (this *Redis) Create(uuid string, data map[string]any, ttl int64) (p *Player, err error) {
 	rk := this.rkey(uuid)
 	var st string
-	if st, err = Encode(uuid); err == nil {
+	if st, err = Encode(uuid); err != nil {
 		return
 	}
 	data[redisSessionKeyTokenName] = st
