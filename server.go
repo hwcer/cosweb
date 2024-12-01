@@ -7,7 +7,6 @@ import (
 	"github.com/hwcer/cosgo/logger"
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/scc"
-	"github.com/hwcer/cosweb/session"
 	"golang.org/x/net/context"
 	"net"
 	"net/http"
@@ -215,6 +214,9 @@ func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 	if errors.Is(err, scc.ErrorTimeout) {
 		err = nil
 	}
+	if err == nil {
+		scc.Release(srv.shutdown)
+	}
 	return
 }
 
@@ -229,14 +231,14 @@ func (srv *Server) Listen(ln net.Listener) (err error) {
 	if errors.Is(err, scc.ErrorTimeout) {
 		err = nil
 	}
+	if err == nil {
+		scc.Release(srv.shutdown)
+	}
 	return
 }
 
-func (srv *Server) Close() error {
-	_ = scc.Cancel()
+func (srv *Server) shutdown() {
 	_ = srv.Server.Shutdown(context.Background())
-	_ = session.Close()
-	return nil
 }
 
 // register 注册所有 service
