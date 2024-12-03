@@ -19,7 +19,6 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		//SCC              *scc.SCC
 		pool             sync.Pool
 		status           int32            //是否已经完成注册
 		middleware       []MiddlewareFunc //中间件
@@ -194,8 +193,8 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Start starts an HTTP server.
-func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
+// Listen starts an HTTP server.
+func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) (err error) {
 	if err = srv.register(); err != nil {
 		return err
 	}
@@ -215,12 +214,12 @@ func (srv *Server) Start(address string, tlsConfig ...*tls.Config) (err error) {
 		err = nil
 	}
 	if err == nil {
-		scc.Release(srv.shutdown)
+		scc.Trigger(srv.shutdown)
 	}
 	return
 }
 
-func (srv *Server) Listen(ln net.Listener) (err error) {
+func (srv *Server) Accept(ln net.Listener) (err error) {
 	if err = srv.register(); err != nil {
 		return err
 	}
@@ -232,7 +231,7 @@ func (srv *Server) Listen(ln net.Listener) (err error) {
 		err = nil
 	}
 	if err == nil {
-		scc.Release(srv.shutdown)
+		scc.Trigger(srv.shutdown)
 	}
 	return
 }
