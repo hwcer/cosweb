@@ -22,7 +22,7 @@ type (
 		pool             sync.Pool
 		status           int32            //是否已经完成注册
 		middleware       []MiddlewareFunc //中间件
-		Binder           binder.Interface //默认序列化方式
+		Binder           binder.Binder    //默认序列化方式
 		Render           Render
 		Server           *http.Server
 		Router           *registry.Router

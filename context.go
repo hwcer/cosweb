@@ -28,7 +28,7 @@ type Context struct {
 	context  map[string]any //临时设置数据
 	aborted  int
 	Server   *Server
-	Binder   binder.Interface
+	Binder   binder.Binder
 	Session  *session.Session
 	Request  *http.Request
 	Response http.ResponseWriter
