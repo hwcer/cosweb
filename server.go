@@ -116,8 +116,10 @@ func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
 // provided root directory.
 // 如果root 不是绝对路径 将以程序的WorkDir为根目录
 func (srv *Server) Static(prefix, root string, method ...string) *Static {
-	static := NewStatic(root)
-	static.Route(srv, prefix, method...)
+	static := NewStatic(prefix, root)
+	for _, r := range static.Route() {
+		srv.Register(r, static.handle, method...)
+	}
 	return static
 }
 

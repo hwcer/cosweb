@@ -2,8 +2,9 @@ package cosweb
 
 import (
 	"github.com/hwcer/cosgo"
+	"github.com/hwcer/cosgo/logger"
 	"net/http"
-	"path"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -11,29 +12,42 @@ import (
 const iStaticRoutePath = "_StaticRoutePath"
 
 type Static struct {
-	root string
+	root   string
+	index  string
+	prefix string
 }
 
-func NewStatic(root string) *Static {
-	if !path.IsAbs(root) {
-		root = filepath.Join(cosgo.Config.GetString("appWorkDir"), root)
+func NewStatic(prefix string, root string) *Static {
+	s := &Static{prefix: prefix, root: cosgo.Abs(root)}
+	s.index = "index.html"
+	return s
+}
+func (this *Static) Index(f string) {
+	if !strings.Contains(f, ".") {
+		logger.Alert("static index file error:%v", f)
+	} else {
+		this.index = f
 	}
-	return &Static{root: root}
 }
-
-func (this *Static) Route(s *Server, prefix string, method ...string) {
-	arr := []string{strings.TrimSuffix(prefix, "/"), "*" + iStaticRoutePath}
-	route := strings.Join(arr, "/")
-	s.Register(route, this.handle, method...)
-}
-
-func (this *Static) handle(c *Context, next Next) (err error) {
-	name := c.GetString(iStaticRoutePath, RequestDataTypeParam)
-	if name == "" {
-		return next()
-	}
-	file := filepath.Join(this.root, name)
-	//fmt.Printf("static file:%v\n", file)
-	http.ServeFile(c.Response, c.Request, file)
+func (this *Static) Route() (r []string) {
+	r = append(r, this.prefix)
+	arr := []string{strings.TrimSuffix(this.prefix, "/"), "*" + iStaticRoutePath}
+	r = append(r, strings.Join(arr, "/"))
 	return
+}
+
+func (this *Static) handle(c *Context, next Next) error {
+	name := c.GetString(iStaticRoutePath, RequestDataTypeParam)
+	var file string
+	if !strings.Contains(name, ".") {
+		file = filepath.Join(this.root, name, this.index)
+		if _, err := os.Stat(file); err != nil {
+			return next()
+		}
+	} else {
+		file = filepath.Join(this.root, name)
+	}
+
+	http.ServeFile(c.Response, c.Request, file)
+	return nil
 }
