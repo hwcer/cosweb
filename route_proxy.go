@@ -16,7 +16,7 @@ const iProxyRoutePath = "_ProxyRoutePath"
 func NewProxy(address ...string) *Proxy {
 	proxy := &Proxy{}
 	for _, addr := range address {
-		proxy.AddTarget(addr)
+		_ = proxy.AddTarget(addr)
 	}
 	proxy.GetTarget = defaultProxyGetTarget
 	return proxy
@@ -82,7 +82,7 @@ func (this *Proxy) handle(c *Context, next Next) (err error) {
 	return
 }
 
-//添加代理服务器地址
+// 添加代理服务器地址
 func (this *Proxy) AddTarget(addr string) error {
 	u, err := url.Parse(addr)
 	if err != nil {
