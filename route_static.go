@@ -30,7 +30,6 @@ func (this *Static) Index(f string) {
 	}
 }
 func (this *Static) Route() (r []string) {
-	r = append(r, this.prefix)
 	arr := []string{strings.TrimSuffix(this.prefix, "/"), "*" + iStaticRoutePath}
 	r = append(r, strings.Join(arr, "/"))
 	return
