@@ -1,6 +1,7 @@
 package cosweb
 
 import (
+	"fmt"
 	"github.com/hwcer/cosgo"
 	"github.com/hwcer/cosgo/logger"
 	"net/http"
@@ -30,8 +31,9 @@ func (this *Static) Index(f string) {
 	}
 }
 func (this *Static) Route() (r []string) {
-	arr := []string{strings.TrimSuffix(this.prefix, "/"), "*" + iStaticRoutePath}
-	r = append(r, strings.Join(arr, "/"))
+	prefix := strings.TrimSuffix(this.prefix, "/")
+	r = append(r, prefix)
+	r = append(r, fmt.Sprintf("%s/*%s", prefix, iStaticRoutePath))
 	return
 }
 
