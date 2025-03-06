@@ -32,7 +32,9 @@ func (this *Static) Index(f string) {
 }
 func (this *Static) Route() (r []string) {
 	prefix := strings.TrimSuffix(this.prefix, "/")
-	r = append(r, prefix)
+	if prefix != "" {
+		r = append(r, prefix)
+	}
 	r = append(r, fmt.Sprintf("%s/*%s", prefix, iStaticRoutePath))
 	return
 }
