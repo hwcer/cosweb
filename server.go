@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"github.com/hwcer/cosgo/binder"
-	"github.com/hwcer/cosgo/logger"
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/scc"
 	"golang.org/x/net/context"
@@ -19,16 +18,16 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		pool             sync.Pool
-		status           int32            //是否已经完成注册
-		middleware       []MiddlewareFunc //中间件
-		Binder           binder.Binder    //默认序列化方式
-		Render           Render
-		Server           *http.Server
-		Router           *registry.Router
-		Registry         *registry.Registry
-		RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
-		HTTPErrorHandler HTTPErrorHandler
+		pool            sync.Pool
+		status          int32            //是否已经完成注册
+		middleware      []MiddlewareFunc //中间件
+		Binder          binder.Binder    //默认序列化方式
+		Render          Render
+		Server          *http.Server
+		Router          *registry.Router
+		Registry        *registry.Registry
+		RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
+		//HTTPErrorHandler HTTPErrorHandler
 	}
 	Next func() error
 	// HandlerFunc defines a function to serve HTTP requests.
@@ -56,7 +55,6 @@ var (
 // New creates an instance of Server.
 func New() (s *Server) {
 	s = &Server{
-		//SCC:      scc.New(ctx),
 		pool:     sync.Pool{},
 		Binder:   binder.New(binder.MIMEJSON),
 		Server:   new(http.Server),
@@ -65,27 +63,10 @@ func New() (s *Server) {
 	}
 	s.Server.Handler = s
 	s.RequestDataType = defaultRequestDataType
-	s.HTTPErrorHandler = s.DefaultHTTPErrorHandler
 	s.pool.New = func() interface{} {
 		return NewContext(s)
 	}
 	return
-}
-
-// DefaultHTTPErrorHandler is the default HTTP error handler. It sends a JSON Response
-// with status code.
-func (srv *Server) DefaultHTTPErrorHandler(c *Context, err error) {
-	he := &HTTPError{}
-	if !errors.As(err, &he) {
-		he = NewHTTPError(http.StatusInternalServerError, err)
-	}
-	c.WriteHeader(he.Code)
-	if c.Request.Method != http.MethodHead {
-		_ = c.Bytes(ContentTypeTextPlain, []byte(he.String()))
-	}
-	if he.Code != http.StatusNotFound && he.Code != http.StatusInternalServerError {
-		logger.Error(he)
-	}
 }
 
 // Use adds middleware to the chain which is run after Router.
@@ -170,17 +151,17 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := srv.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
-			srv.HTTPErrorHandler(c, NewHTTPError500(e))
+			Errorf(c, NewHTTPError500(e))
 		}
 		srv.Release(c)
 	}()
 
 	if scc.Stopped() {
-		srv.HTTPErrorHandler(c, errors.New("server stopped"))
+		Errorf(c, errors.New("server stopped"))
 		return
 	}
 	if err, ok := c.doMiddleware(srv.middleware); err != nil {
-		srv.HTTPErrorHandler(c, err)
+		Errorf(c, err)
 		return
 	} else if !ok {
 		return
@@ -189,9 +170,9 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	nodes := srv.Router.Match(c.Request.Method, c.Request.URL.Path)
 	err := c.doHandle(nodes)
 	if err != nil {
-		srv.HTTPErrorHandler(c, err)
+		Errorf(c, err)
 	} else if c.aborted == 0 {
-		srv.HTTPErrorHandler(c, ErrNotFound) //所有备选路由都放弃执行
+		Errorf(c, ErrNotFound) //所有备选路由都放弃执行
 	}
 }
 
