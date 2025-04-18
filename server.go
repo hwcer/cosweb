@@ -166,8 +166,8 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if !ok {
 		return
 	}
-
-	nodes := srv.Router.Match(c.Request.Method, c.Request.URL.Path)
+	path := registry.Formatter(c.Request.URL.Path)
+	nodes := srv.Router.Match(c.Request.Method, path)
 	err := c.doHandle(nodes)
 	if err != nil {
 		Errorf(c, err)
