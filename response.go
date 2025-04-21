@@ -129,8 +129,7 @@ func (c *Context) XML(i interface{}, indent string) (err error) {
 	if err != nil {
 		return err
 	}
-	c.Bytes(ContentTypeApplicationXML, data)
-	return
+	return c.Bytes(ContentTypeApplicationXML, data)
 }
 
 func (c *Context) HTML(html string) (err error) {

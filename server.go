@@ -20,7 +20,7 @@ type (
 	Server struct {
 		pool            sync.Pool
 		status          int32            //是否已经完成注册
-		middleware      []MiddlewareFunc //中间件
+		middleware      []MiddlewareFunc //全局中间件
 		Binder          binder.Binder    //默认序列化方式
 		Render          Render
 		Server          *http.Server
@@ -29,11 +29,8 @@ type (
 		RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		//HTTPErrorHandler HTTPErrorHandler
 	}
-	Next func() error
 	// HandlerFunc defines a function to serve HTTP requests.
-	HandlerFunc func(*Context, Next) error
-	// MiddlewareFunc defines a function to process middleware.
-	MiddlewareFunc func(*Context, Next) error
+	HandlerFunc func(*Context) error
 	// HTTPErrorHandler is a centralized HTTP error handler.
 	HTTPErrorHandler func(*Context, error)
 )
@@ -69,9 +66,8 @@ func New() (s *Server) {
 	return
 }
 
-// Use adds middleware to the chain which is run after Router.
-func (srv *Server) Use(middleware ...MiddlewareFunc) {
-	srv.middleware = append(srv.middleware, middleware...)
+func (srv *Server) Use(i MiddlewareFunc) {
+	srv.middleware = append(srv.middleware, i)
 }
 
 // GET registers a new GET Register for a path with matching handler in the Router
@@ -110,10 +106,8 @@ func (srv *Server) Service(name string, handler ...interface{}) *registry.Servic
 	if service.Handler == nil {
 		service.Handler = &Handler{}
 	}
-	if h, ok := service.Handler.(*Handler); ok {
-		for _, i := range handler {
-			h.Use(i)
-		}
+	for _, i := range handler {
+		service.Use(i)
 	}
 	return service
 }
@@ -160,19 +154,14 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Errorf(c, errors.New("server stopped"))
 		return
 	}
-	if err, ok := c.doMiddleware(srv.middleware); err != nil {
-		Errorf(c, err)
-		return
-	} else if !ok {
+	//srv
+	if !c.doMiddleware(srv.middleware) {
 		return
 	}
 	path := registry.Formatter(c.Request.URL.Path)
 	nodes := srv.Router.Match(c.Request.Method, path)
-	err := c.doHandle(nodes)
-	if err != nil {
+	if err := c.doHandle(nodes); err != nil {
 		Errorf(c, err)
-	} else if c.aborted == 0 {
-		Errorf(c, ErrNotFound) //所有备选路由都放弃执行
 	}
 }
 

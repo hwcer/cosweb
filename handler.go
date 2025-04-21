@@ -10,11 +10,12 @@ import (
 
 // registry 通过registry集中注册对象
 type handleCaller interface {
-	Caller(node *registry.Node, c *Context) interface{}
+	Caller(node *registry.Node, c *Context) any
 }
-
+type Next func() error
 type HandlerCaller func(node *registry.Node, c *Context) (interface{}, error)
 type HandlerFilter func(node *registry.Node) bool
+type MiddlewareFunc func(*Context, Next) error
 type HandlerSerialize func(c *Context, reply interface{}) (interface{}, error)
 
 type Handler struct {
@@ -26,7 +27,26 @@ type Handler struct {
 }
 
 func (h *Handler) Use(src interface{}) {
+	switch v := src.(type) {
+	case HandlerCaller:
+		h.caller = v
+	case HandlerFilter:
+		h.filter = v
+	case HandlerSerialize:
+		h.serialize = v
+	case MiddlewareFunc:
+		h.middleware = append(h.middleware, v)
+	case []string:
+		h.method = append(h.method, v...)
+	default:
+		h.useFromFunc(src)
+	}
+}
+func (h *Handler) useFromFunc(src any) {
 	if v, ok := src.(func(node *registry.Node, c *Context) (interface{}, error)); ok {
+		h.caller = v
+	}
+	if v, ok := src.(HandlerCaller); ok {
 		h.caller = v
 	}
 	if v, ok := src.(func(node *registry.Node) bool); ok {
@@ -42,12 +62,13 @@ func (h *Handler) Use(src interface{}) {
 		h.method = append(h.method, v...)
 	}
 }
+
 func (h *Handler) Filter(node *registry.Node) bool {
 	if h.filter != nil {
 		return h.filter(node)
 	}
 	if node.IsFunc() {
-		_, ok := node.Method().(func(*Context) interface{})
+		_, ok := node.Method().(func(*Context) any)
 		return ok
 	} else if node.IsMethod() {
 		t := node.Value().Type()
@@ -66,34 +87,29 @@ func (h *Handler) Filter(node *registry.Node) bool {
 
 // closure 闭包绑定Node和route
 func (h *Handler) closure(node *registry.Node) HandlerFunc {
-	return func(c *Context, next Next) error {
-		return h.handle(c, node)
+	return func(c *Context) error {
+		return h.handle(node, c)
 	}
 }
 
 // handle cosweb入口
-func (h *Handler) handle(c *Context, node *registry.Node) (err error) {
+func (h *Handler) handle(node *registry.Node, c *Context) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = ErrInternalServerError
 			logger.Trace("%v\n%v", e, string(debug.Stack()))
 		}
 	}()
-	service := node.Service
-	handler, ok := service.Handler.(*Handler)
-	if !ok {
-		return ErrHandlerError
+
+	if !c.doMiddleware(h.middleware) {
+		return nil
 	}
-	if len(handler.middleware) > 0 {
-		if err, ok = c.doMiddleware(handler.middleware); err != nil || !ok {
-			return
-		}
-	}
-	reply, err := handler.Caller(node, c)
+
+	reply, err := h.Caller(node, c)
 	if err != nil {
 		return
 	}
-	return handler.Serialize(c, reply)
+	return h.Serialize(c, reply)
 }
 
 func (h *Handler) Caller(node *registry.Node, c *Context) (reply interface{}, err error) {

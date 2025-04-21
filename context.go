@@ -26,7 +26,6 @@ type Context struct {
 	params   map[string]string
 	values   values.Values
 	context  map[string]any //临时设置数据
-	aborted  int
 	Server   *Server
 	Binder   binder.Binder
 	Session  *session.Session
@@ -57,58 +56,42 @@ func (c *Context) release() {
 	c.params = nil
 	c.values = nil
 	c.context = nil
-	c.aborted = 0
 	c.Request = nil
 	c.Response = nil
 	c.Session.Release()
 }
 
-func (c *Context) next() error {
-	c.aborted -= 1
-	return nil
-}
-
 func (c *Context) doHandle(nodes []*registry.Router) (err error) {
 	if len(nodes) == 0 {
-		return
+		return ErrNotFound
 	}
-	c.aborted += len(nodes)
-	num := c.aborted
-	for _, node := range nodes {
-		num -= 1
-		c.route = node.Route()[2:]
-		c.params = node.Params(c.Request.Method, c.Request.URL.Path)
-		if handle, ok := node.Handle().(HandlerFunc); ok {
-			err = handle(c, c.next)
-			if err != nil || c.aborted != num {
-				return
-			}
-		}
+	node := nodes[0]
+	handle, ok := node.Handle().(HandlerFunc)
+	if !ok {
+		return ErrHandlerError
 	}
-	return
+	c.params = node.Params(c.Request.Method, c.Request.URL.Path)
+	return handle(c)
+
 }
 
-// doMiddleware 执行中间件
-func (c *Context) doMiddleware(middleware []MiddlewareFunc) (error, bool) {
+func (c *Context) doMiddleware(middleware []MiddlewareFunc) bool {
 	if len(middleware) == 0 {
-		return nil, true
+		return true
 	}
-	c.aborted += len(middleware)
-	num := c.aborted
-	for _, modFun := range middleware {
-		num -= 1
-		if err := modFun(c, c.next); err != nil {
-			return err, false
-		}
-		if c.aborted != num {
-			return nil, false
+	next := false
+	var fn = func() error { next = true; return nil }
+	for _, mf := range middleware {
+		if err := mf(c, fn); err != nil {
+			Errorf(c, err)
+			return false
+		} else if !next {
+			return false
+		} else {
+			next = false
 		}
 	}
-	return nil, true
-}
-
-func (c *Context) Abort() {
-	c.aborted += 1
+	return true
 }
 
 // Route 当期匹配的路由
@@ -156,10 +139,6 @@ func (c *Context) RemoteAddr() string {
 	ra, _, _ := net.SplitHostPort(c.Request.RemoteAddr)
 	return ra
 }
-
-//func (c *Context) Cookie(cookie *http.Cookie) {
-//	http.SetCookie(c, cookie)
-//}
 
 func (c *Context) Set(key string, val any) {
 	if c.context == nil {

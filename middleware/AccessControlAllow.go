@@ -44,7 +44,7 @@ func (this *AccessControlAllow) Headers(headers ...string) {
 	this.headers = append(this.headers, headers...)
 }
 
-func (this *AccessControlAllow) Handle(c *cosweb.Context, next cosweb.Next) error {
+func (this *AccessControlAllow) Handle(c *cosweb.Context, next cosweb.Next) (err error) {
 	header := c.Header()
 
 	if len(this.origin) > 0 {
@@ -64,9 +64,9 @@ func (this *AccessControlAllow) Handle(c *cosweb.Context, next cosweb.Next) erro
 		header.Set("Access-Control-Max-Age", this.expire)
 	}
 	if c.Request.Method == http.MethodOptions {
-		c.Write([]byte("options OK"))
+		_, err = c.Write([]byte("options OK"))
 	} else {
-		next()
+		err = next()
 	}
-	return nil
+	return
 }
