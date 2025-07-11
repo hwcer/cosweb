@@ -191,6 +191,33 @@ func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) (err error) 
 	return
 }
 
+// TLS starts an HTTPS server.
+// address  string | net.Listener
+func (srv *Server) TLS(address any, certFile, keyFile string) (err error) {
+	if err = srv.register(); err != nil {
+		return err
+	}
+	//启动服务
+	err = scc.Timeout(time.Second, func() error {
+		switch v := address.(type) {
+		case string:
+			srv.Server.Addr = v
+			return srv.Server.ListenAndServeTLS(certFile, keyFile)
+		case net.Listener:
+			return srv.Server.ServeTLS(v, certFile, keyFile)
+		default:
+			return errors.New("unknown address type")
+		}
+	})
+	if errors.Is(err, scc.ErrorTimeout) {
+		err = nil
+	}
+	if err == nil {
+		scc.Trigger(srv.shutdown)
+	}
+	return
+}
+
 func (srv *Server) Accept(ln net.Listener) (err error) {
 	if err = srv.register(); err != nil {
 		return err
