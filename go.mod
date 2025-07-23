@@ -5,8 +5,8 @@ go 1.23.0
 toolchain go1.23.4
 
 require (
-	github.com/hwcer/cosgo v0.0.0-20250411054210-c6e9c1691b26
-	github.com/hwcer/logger v0.0.0-20250411022920-7365cc42b42f
+	github.com/hwcer/cosgo v1.4.0
+	github.com/hwcer/logger v0.1.0
 )
 
 require (
@@ -15,19 +15,19 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
-	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
+	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/klauspost/compress v1.17.7 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
-	github.com/onsi/gomega v1.37.0 // indirect
+	github.com/onsi/gomega v1.38.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
-	github.com/spf13/cast v1.7.1 // indirect
-	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/spf13/cast v1.9.2 // indirect
+	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
@@ -37,13 +37,14 @@ require (
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.mongodb.org/mongo-driver v1.17.3 // indirect
+	go.mongodb.org/mongo-driver v1.17.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.37.0
-	golang.org/x/net v0.39.0
-	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/crypto v0.40.0
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
+	golang.org/x/net v0.42.0
+	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
