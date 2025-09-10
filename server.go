@@ -3,16 +3,18 @@ package cosweb
 import (
 	"crypto/tls"
 	"errors"
-	"github.com/hwcer/cosgo/binder"
-	"github.com/hwcer/cosgo/registry"
-	"github.com/hwcer/cosgo/scc"
-	"golang.org/x/net/context"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/hwcer/cosgo/binder"
+	"github.com/hwcer/cosgo/registry"
+	"github.com/hwcer/cosgo/scc"
+	"github.com/hwcer/logger"
+	"golang.org/x/net/context"
 )
 
 type (
@@ -119,7 +121,9 @@ func (srv *Server) Register(route string, handler HandlerFunc, method ...string)
 		method = []string{http.MethodGet, http.MethodPost}
 	}
 	for _, m := range method {
-		_ = srv.Router.Register(handler, strings.ToUpper(m), route)
+		if err := srv.Router.Register(handler, strings.ToUpper(m), route); err != nil {
+			logger.Alert(err)
+		}
 	}
 }
 
@@ -247,7 +251,8 @@ func (srv *Server) register() error {
 	srv.Registry.Nodes(func(node *registry.Node) bool {
 		if handler, ok := node.Service.Handler.(*Handler); ok {
 			path := registry.Join(node.Service.Name(), node.Name())
-			srv.Register(path, handler.closure(node), handler.method...)
+			handle := handler.closure(node)
+			srv.Register(path, handle, handler.method...)
 		}
 		return true
 	})

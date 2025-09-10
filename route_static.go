@@ -2,12 +2,13 @@ package cosweb
 
 import (
 	"fmt"
-	"github.com/hwcer/cosgo"
-	"github.com/hwcer/logger"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hwcer/cosgo"
+	"github.com/hwcer/logger"
 )
 
 const iStaticRoutePath = "_StaticRoutePath"
@@ -32,15 +33,16 @@ func (this *Static) Index(f string) {
 }
 func (this *Static) Route() (r []string) {
 	prefix := strings.TrimSuffix(this.prefix, "/")
-	if prefix != "" {
-		r = append(r, prefix)
-	}
+	r = append(r, prefix)
 	r = append(r, fmt.Sprintf("%s/*%s", prefix, iStaticRoutePath))
 	return
 }
 
 func (this *Static) handle(c *Context) error {
 	name := c.GetString(iStaticRoutePath, RequestDataTypeParam)
+	if name == "" {
+		name = this.index
+	}
 	var file string
 	if !strings.Contains(name, ".") {
 		file = filepath.Join(this.root, name, this.index)
