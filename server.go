@@ -96,6 +96,9 @@ func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
 // 如果root 不是绝对路径 将以程序的WorkDir为根目录
 func (srv *Server) Static(prefix, root string, method ...string) *Static {
 	static := NewStatic(prefix, root)
+	if len(method) == 0 {
+		method = append(AnyHttpMethod, http.MethodGet)
+	}
 	for _, r := range static.Route() {
 		srv.Register(r, static.handle, method...)
 	}
