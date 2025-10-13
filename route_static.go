@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hwcer/cosgo"
+	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/logger"
 )
 
@@ -32,8 +33,9 @@ func (this *Static) Index(f string) {
 	}
 }
 func (this *Static) Route() (r []string) {
-	prefix := strings.TrimSuffix(this.prefix, "/")
-	r = append(r, prefix)
+	prefix := registry.Route(this.prefix)
+	prefix = strings.TrimSuffix(prefix, "*")
+	prefix = strings.TrimSuffix(prefix, "/")
 	r = append(r, fmt.Sprintf("%s/*%s", prefix, iStaticRoutePath))
 	return
 }

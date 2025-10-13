@@ -5,9 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/hwcer/cosgo/binder"
@@ -20,13 +18,13 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		pool            sync.Pool
-		status          int32            //是否已经完成注册
-		middleware      []MiddlewareFunc //全局中间件
-		Binder          binder.Binder    //默认序列化方式
-		Render          Render
-		Server          *http.Server
-		Router          *registry.Router
+		pool sync.Pool
+		//status          int32            //是否已经完成注册
+		middleware []MiddlewareFunc //全局中间件
+		Binder     binder.Binder    //默认序列化方式
+		Render     Render
+		Server     *http.Server
+		//Router          *registry.Router
 		Registry        *registry.Registry
 		RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
 		//HTTPErrorHandler HTTPErrorHandler
@@ -37,28 +35,28 @@ type (
 	HTTPErrorHandler func(*Context, error)
 )
 
-var (
-	AnyHttpMethod = []string{
-		http.MethodGet,
-		http.MethodHead,
-		http.MethodPost,
-		http.MethodPut,
-		http.MethodPatch,
-		http.MethodDelete,
-		http.MethodConnect,
-		http.MethodOptions,
-		http.MethodTrace,
-	}
-)
+//var (
+//	AnyHttpMethod = []string{
+//		http.MethodGet,
+//		http.MethodHead,
+//		http.MethodPost,
+//		http.MethodPut,
+//		http.MethodPatch,
+//		http.MethodDelete,
+//		http.MethodConnect,
+//		http.MethodOptions,
+//		http.MethodTrace,
+//	}
+//)
 
 // New creates an instance of Server.
 func New() (s *Server) {
 	s = &Server{
-		pool:     sync.Pool{},
-		Binder:   binder.New(binder.MIMEJSON),
-		Server:   new(http.Server),
-		Router:   registry.NewRouter(),
-		Registry: registry.New(nil),
+		pool:   sync.Pool{},
+		Binder: binder.New(binder.MIMEJSON),
+		Server: new(http.Server),
+		//Router:   registry.NewRouter(),
+		Registry: registry.New(),
 	}
 	s.Server.Handler = s
 	s.RequestDataType = defaultRequestDataType
@@ -97,7 +95,7 @@ func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
 func (srv *Server) Static(prefix, root string, method ...string) *Static {
 	static := NewStatic(prefix, root)
 	if len(method) == 0 {
-		method = append(AnyHttpMethod, http.MethodGet)
+		method = []string{http.MethodGet}
 	}
 	for _, r := range static.Route() {
 		srv.Register(r, static.handle, method...)
@@ -120,13 +118,9 @@ func (srv *Server) Service(name string, handler ...interface{}) *registry.Servic
 // Register AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
 func (srv *Server) Register(route string, handler HandlerFunc, method ...string) {
-	if len(method) == 0 {
-		method = []string{http.MethodGet, http.MethodPost}
-	}
-	for _, m := range method {
-		if err := srv.Router.Register(handler, strings.ToUpper(m), route); err != nil {
-			logger.Alert(err)
-		}
+	router := srv.Registry.Method()
+	if err := router.Register(handler, route, method...); err != nil {
+		logger.Alert(err)
 	}
 }
 
@@ -165,7 +159,8 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !c.doMiddleware(srv.middleware) {
 		return
 	}
-	nodes := srv.Router.Match(c.Request.Method, c.Request.URL.Path)
+	router := srv.Registry.Method()
+	nodes := router.Match(c.Request.Method, c.Request.URL.Path)
 	if err := c.doHandle(nodes); err != nil {
 		Errorf(c, err)
 	}
@@ -173,9 +168,6 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Listen starts an HTTP server.
 func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) (err error) {
-	if err = srv.register(); err != nil {
-		return err
-	}
 	srv.Server.Addr = address
 	if len(tlsConfig) > 0 {
 		srv.Server.TLSConfig = tlsConfig[0]
@@ -200,9 +192,6 @@ func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) (err error) 
 // TLS starts an HTTPS server.
 // address  string | net.Listener
 func (srv *Server) TLS(address any, certFile, keyFile string) (err error) {
-	if err = srv.register(); err != nil {
-		return err
-	}
 	//启动服务
 	err = scc.Timeout(time.Second, func() error {
 		switch v := address.(type) {
@@ -225,9 +214,6 @@ func (srv *Server) TLS(address any, certFile, keyFile string) (err error) {
 }
 
 func (srv *Server) Accept(ln net.Listener) (err error) {
-	if err = srv.register(); err != nil {
-		return err
-	}
 	//启动服务
 	err = scc.Timeout(time.Second, func() error {
 		return srv.Server.Serve(ln)
@@ -246,17 +232,17 @@ func (srv *Server) shutdown() {
 }
 
 // register 注册所有 service
-func (srv *Server) register() error {
-	if !atomic.CompareAndSwapInt32(&srv.status, 0, 1) {
-		return errors.New("server already running")
-	}
-	srv.Registry.Nodes(func(node *registry.Node) bool {
-		if handler, ok := node.Service.Handler.(*Handler); ok {
-			path := registry.Join(node.Service.Name(), node.Name())
-			handle := handler.closure(node)
-			srv.Register(path, handle, handler.method...)
-		}
-		return true
-	})
-	return nil
-}
+//func (srv *Server) register() error {
+//	if !atomic.CompareAndSwapInt32(&srv.status, 0, 1) {
+//		return errors.New("server already running")
+//	}
+//	srv.Registry.Nodes(func(node *registry.Node) bool {
+//		if handler, ok := node.Service.Handler.(*Handler); ok {
+//			path := registry.Join(node.Service.Name(), node.Name())
+//			handle := handler.closure(node)
+//			srv.Register(path, handle, handler.method...)
+//		}
+//		return true
+//	})
+//	return nil
+//}
