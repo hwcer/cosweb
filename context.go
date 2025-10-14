@@ -3,14 +3,15 @@ package cosweb
 import (
 	"bytes"
 	"fmt"
-	"github.com/hwcer/cosgo/binder"
-	"github.com/hwcer/cosgo/registry"
-	"github.com/hwcer/cosgo/session"
-	"github.com/hwcer/cosgo/values"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/hwcer/cosgo/binder"
+	"github.com/hwcer/cosgo/registry"
+	"github.com/hwcer/cosgo/session"
+	"github.com/hwcer/cosgo/values"
 )
 
 const (
@@ -70,7 +71,7 @@ func (c *Context) doHandle(nodes []*registry.Router) (err error) {
 	if !ok {
 		return ErrHandlerError
 	}
-	c.params = node.Params(c.Request.Method, c.Request.URL.Path)
+	c.params = node.Params(c.Request.URL.Path)
 	return handle(c)
 
 }

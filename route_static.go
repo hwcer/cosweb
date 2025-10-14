@@ -2,6 +2,7 @@ package cosweb
 
 import (
 	"fmt"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +14,10 @@ import (
 )
 
 const iStaticRoutePath = "_StaticRoutePath"
+
+func init() {
+	_ = mime.AddExtensionType(".mjs", "text/javascript")
+}
 
 type Static struct {
 	root   string
