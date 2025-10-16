@@ -5,13 +5,52 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+type Response struct {
+	http.ResponseWriter
+	status   int
+	canWrite bool
+	hijacked bool
+}
+
+func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := res.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("response does not implement http.Hijacker")
+	}
+
+	conn, buf, err := hijacker.Hijack()
+	if err == nil {
+		res.hijacked = true // 标记为已劫持
+	}
+	return conn, buf, err
+}
+func (res *Response) CanWrite() bool {
+	return res.canWrite && !res.hijacked
+}
+func (res *Response) Write(b []byte) (n int, err error) {
+	if !res.CanWrite() {
+		return 0, nil
+	}
+	res.canWrite = false
+	if res.status == 0 {
+		res.WriteHeader(http.StatusOK)
+	}
+	return res.ResponseWriter.Write(b)
+}
+func (res *Response) WriteHeader(code int) {
+	res.status = code
+	res.ResponseWriter.WriteHeader(code)
+}
 
 func (c *Context) Header() http.Header {
 	return c.Response.Header()
@@ -19,38 +58,10 @@ func (c *Context) Header() http.Header {
 
 // Write writes the store to the connection as part of an HTTP reply.
 func (c *Context) Write(b []byte) (n int, err error) {
-	//c.state.Push(netStateTypeWriteComplete)
-	//c.WriteHeader(0)
-	n, err = c.Response.Write(b)
-	//c.contentSize += int64(n)
-	return
+	return c.Response.Write(b)
 }
-
-// Writable 是否可写，如果已经写入头则返回FALSE
-func (c *Context) Writable() bool {
-	return c.Response.Header().Get(HeaderContentType) == ""
-}
-
-// Status sends an HTTP Response header with status code. If Status is
-// not called explicitly, the first call to Write will trigger an implicit
-// Status(http.StatusOK). Thus explicit calls to Status are mainly
-// used to send error codes.
 func (c *Context) WriteHeader(code int) {
 	c.Response.WriteHeader(code)
-}
-
-// Flush implements the http.Flusher interface to allow an HTTP handler to flush
-// buffered store to the client.
-// See [http.Flusher](https://golang.org/pkg/net/http/#Flusher)
-func (c *Context) Flush() {
-	c.Response.(http.Flusher).Flush()
-}
-
-// Hijack implements the http.Hijacker interface to allow an HTTP handler to
-// take over the connection.
-// See [http.Hijacker](https://golang.org/pkg/net/http/#Hijacker)
-func (c *Context) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return c.Response.(http.Hijacker).Hijack()
 }
 
 func (c *Context) writeContentType(contentType ContentType) {
@@ -98,7 +109,7 @@ func (c *Context) File(file string) (err error) {
 			return
 		}
 	}
-	http.ServeContent(c, c.Request, fi.Name(), fi.ModTime(), f)
+	http.ServeContent(c.Response, c.Request, fi.Name(), fi.ModTime(), f)
 	return
 }
 
@@ -146,4 +157,9 @@ func (c *Context) JSON(i interface{}) error {
 		return err
 	}
 	return c.Bytes(ContentTypeApplicationJSON, data)
+}
+
+// contains 检查字符串s是否包含子串substr
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
 }

@@ -29,7 +29,7 @@ type Context struct {
 	Server   *Server
 	Session  *session.Session
 	Request  *http.Request
-	Response http.ResponseWriter
+	Response *Response
 }
 
 // NewContext returns a Context instance.
@@ -43,7 +43,7 @@ func NewContext(s *Server) *Context {
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Request = r
-	c.Response = w
+	c.Response = &Response{ResponseWriter: w, canWrite: true}
 }
 
 // 释放资源,准备进入缓存池
@@ -63,7 +63,7 @@ func (c *Context) doHandle(nodes []*registry.Node) error {
 	if len(nodes) == 0 {
 		return ErrNotFound
 	}
-	node := nodes[len(nodes)-1]
+	node := nodes[0]
 	handle, ok := node.Handler().(*Handler)
 	if !ok {
 		return ErrHandlerError

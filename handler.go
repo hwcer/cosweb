@@ -5,6 +5,7 @@ import (
 	"runtime/debug"
 
 	"github.com/hwcer/cosgo/registry"
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/logger"
 )
 
@@ -98,7 +99,7 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply any, err error)
 		return h.caller(node, c)
 	}
 	if node.IsFunc() {
-		f, _ := node.Method().(func(c *Context) any)
+		f, _ := node.Method().(HandlerFunc)
 		reply = f(c)
 	} else if s, ok := node.Binder().(handleCaller); ok {
 		reply = s.Caller(node, c)
@@ -109,14 +110,17 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply any, err error)
 	return
 }
 
-func (this *Handler) Serialize(c *Context, reply any) (err error) {
-	if !c.Writable() {
-		return nil
-	}
+func (this *Handler) format(c *Context, reply any) (any, error) {
 	if this.serialize != nil {
-		reply, err = this.serialize(c, reply)
+		return this.serialize(c, reply)
 	}
-	if err != nil || !c.Writable() {
+	if v, ok := reply.(error); ok {
+		return values.Error(v), nil
+	}
+	return reply, nil
+}
+func (this *Handler) Serialize(c *Context, reply any) (err error) {
+	if reply, err = this.format(c, reply); err != nil {
 		return err
 	}
 	b := c.Accept()
@@ -127,7 +131,7 @@ func (this *Handler) Serialize(c *Context, reply any) (err error) {
 		return c.Bytes(ContentType(b.String()), *v)
 	default:
 		var data []byte
-		if data, err = b.Marshal(reply); err == nil {
+		if data, err = b.Marshal(reply); err != nil {
 			return err
 		} else {
 			return c.Bytes(ContentType(b.String()), data)
