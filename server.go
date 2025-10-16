@@ -18,36 +18,28 @@ import (
 type (
 	// Server is the top-level framework instance.
 	Server struct {
-		pool sync.Pool
-		//status          int32            //是否已经完成注册
-		middleware []MiddlewareFunc //全局中间件
-		Binder     binder.Binder    //默认序列化方式
-		Render     Render
-		Server     *http.Server
-		//Router          *registry.Router
+		pool            sync.Pool
+		middleware      []MiddlewareFunc //全局中间件
+		Binder          binder.Binder    //默认序列化方式
+		Render          Render
+		Server          *http.Server
 		Registry        *registry.Registry
 		RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
-		//HTTPErrorHandler HTTPErrorHandler
 	}
-	// HandlerFunc defines a function to serve HTTP requests.
-	HandlerFunc func(*Context) error
-	// HTTPErrorHandler is a centralized HTTP error handler.
-	HTTPErrorHandler func(*Context, error)
+	HandlerFunc func(*Context) any
 )
 
-//var (
-//	AnyHttpMethod = []string{
-//		http.MethodGet,
-//		http.MethodHead,
-//		http.MethodPost,
-//		http.MethodPut,
-//		http.MethodPatch,
-//		http.MethodDelete,
-//		http.MethodConnect,
-//		http.MethodOptions,
-//		http.MethodTrace,
-//	}
-//)
+var (
+	AnyHttpMethod = []string{
+		http.MethodGet,
+		http.MethodHead,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete,
+		http.MethodOptions,
+	}
+)
 
 // New creates an instance of Server.
 func New() (s *Server) {
@@ -104,13 +96,12 @@ func (srv *Server) Static(prefix, root string, method ...string) *Static {
 }
 
 // Service 使用Registry的Service批量注册struct
-func (srv *Server) Service(name string, handler ...interface{}) *registry.Service {
-	service := srv.Registry.Service(name)
-	if service.Handler == nil {
-		service.Handler = &Handler{}
-	}
-	for _, i := range handler {
-		service.Use(i)
+func (srv *Server) Service(name string, handlers ...any) *registry.Service {
+	handler := &Handler{}
+	service := srv.Registry.Service(name, handler)
+	service.SetMethods(AnyHttpMethod)
+	for _, i := range handlers {
+		handler.Use(i)
 	}
 	return service
 }
@@ -118,8 +109,14 @@ func (srv *Server) Service(name string, handler ...interface{}) *registry.Servic
 // Register AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
 func (srv *Server) Register(route string, handler HandlerFunc, method ...string) {
-	router := srv.Registry.Method()
-	if err := router.Register(handler, route, method...); err != nil {
+	service := srv.Service("")
+	var err error
+	if len(method) == 0 {
+		err = service.Register(handler, route)
+	} else {
+		err = service.RegisterWithMethod(handler, method, route)
+	}
+	if err != nil {
 		logger.Alert(err)
 	}
 }
@@ -146,23 +143,22 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := srv.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
-			Errorf(c, NewHTTPError500(e))
+			HTTPErrorHandler(c, e)
 		}
 		srv.Release(c)
 	}()
 
 	if scc.Stopped() {
-		Errorf(c, errors.New("server stopped"))
+		HTTPErrorHandler(c, "server stopped")
 		return
 	}
 	//srv
 	if !c.doMiddleware(srv.middleware) {
 		return
 	}
-	router := srv.Registry.Method()
-	nodes := router.Match(c.Request.Method, c.Request.URL.Path)
+	nodes := srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
 	if err := c.doHandle(nodes); err != nil {
-		Errorf(c, err)
+		HTTPErrorHandler(c, err)
 	}
 }
 
@@ -230,19 +226,3 @@ func (srv *Server) Accept(ln net.Listener) (err error) {
 func (srv *Server) shutdown() {
 	_ = srv.Server.Shutdown(context.Background())
 }
-
-// register 注册所有 service
-//func (srv *Server) register() error {
-//	if !atomic.CompareAndSwapInt32(&srv.status, 0, 1) {
-//		return errors.New("server already running")
-//	}
-//	srv.Registry.Nodes(func(node *registry.Node) bool {
-//		if handler, ok := node.Service.Handler.(*Handler); ok {
-//			path := registry.Join(node.Service.Name(), node.Name())
-//			handle := handler.closure(node)
-//			srv.Register(path, handle, handler.method...)
-//		}
-//		return true
-//	})
-//	return nil
-//}

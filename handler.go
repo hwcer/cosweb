@@ -1,11 +1,11 @@
 package cosweb
 
 import (
-	"github.com/hwcer/cosgo/registry"
-	"github.com/hwcer/cosgo/values"
-	"github.com/hwcer/logger"
 	"reflect"
 	"runtime/debug"
+
+	"github.com/hwcer/cosgo/registry"
+	"github.com/hwcer/logger"
 )
 
 // registry 通过registry集中注册对象
@@ -15,7 +15,7 @@ type handleCaller interface {
 type Next func() error
 type HandlerCaller func(node *registry.Node, c *Context) (interface{}, error)
 type HandlerFilter func(node *registry.Node) bool
-type MiddlewareFunc func(*Context, Next) error
+type MiddlewareFunc func(*Context) bool
 type HandlerSerialize func(c *Context, reply interface{}) (interface{}, error)
 
 type Handler struct {
@@ -55,7 +55,7 @@ func (h *Handler) useFromFunc(src any) {
 	if v, ok := src.(func(c *Context, reply interface{}) (interface{}, error)); ok {
 		h.serialize = v
 	}
-	if v, ok := src.(func(*Context, Next) error); ok {
+	if v, ok := src.(func(*Context) bool); ok {
 		h.middleware = append(h.middleware, v)
 	}
 	if v, ok := src.([]string); ok {
@@ -68,7 +68,8 @@ func (h *Handler) Filter(node *registry.Node) bool {
 		return h.filter(node)
 	}
 	if node.IsFunc() {
-		_, ok := node.Method().(func(*Context) any)
+		i := node.Method()
+		_, ok := i.(HandlerFunc)
 		return ok
 	} else if node.IsMethod() {
 		t := node.Value().Type()
@@ -76,48 +77,28 @@ func (h *Handler) Filter(node *registry.Node) bool {
 			return false
 		}
 		return true
-	} else {
+	} else if node.IsStruct() {
 		if _, ok := node.Binder().(handleCaller); !ok {
 			v := reflect.Indirect(reflect.ValueOf(node.Binder()))
 			logger.Debug("[%v]未正确实现Caller方法,会影响程序性能", v.Type().String())
 		}
 		return true
 	}
+	return true
 }
 
-// closure 闭包绑定Node和route
-func (h *Handler) closure(node *registry.Node) HandlerFunc {
-	return func(c *Context) error {
-		return h.handle(node, c)
-	}
-}
-
-// handle cosweb入口
-func (h *Handler) handle(node *registry.Node, c *Context) (err error) {
+func (h *Handler) Caller(node *registry.Node, c *Context) (reply any, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = ErrInternalServerError
 			logger.Trace("%v\n%v", e, string(debug.Stack()))
 		}
 	}()
-
-	if !c.doMiddleware(h.middleware) {
-		return nil
-	}
-
-	reply, err := h.Caller(node, c)
-	if err != nil {
-		return
-	}
-	return h.Serialize(c, reply)
-}
-
-func (h *Handler) Caller(node *registry.Node, c *Context) (reply interface{}, err error) {
 	if h.caller != nil {
 		return h.caller(node, c)
 	}
 	if node.IsFunc() {
-		f, _ := node.Method().(func(c *Context) interface{})
+		f, _ := node.Method().(func(c *Context) any)
 		reply = f(c)
 	} else if s, ok := node.Binder().(handleCaller); ok {
 		reply = s.Caller(node, c)
@@ -127,7 +108,8 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply interface{}, er
 	}
 	return
 }
-func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
+
+func (this *Handler) Serialize(c *Context, reply any) (err error) {
 	if !c.Writable() {
 		return nil
 	}
@@ -137,14 +119,18 @@ func (this *Handler) Serialize(c *Context, reply interface{}) (err error) {
 	if err != nil || !c.Writable() {
 		return err
 	}
-	var ok bool
-	var data []byte
-	if data, ok = reply.([]byte); !ok {
-		data, err = c.Binder.Marshal(values.Parse(reply))
-	}
-	if err != nil {
-		return err
-	} else {
-		return c.Bytes(ContentType(c.Binder.String()), data)
+	b := c.Accept()
+	switch v := reply.(type) {
+	case []byte:
+		return c.Bytes(ContentType(b.String()), v)
+	case *[]byte:
+		return c.Bytes(ContentType(b.String()), *v)
+	default:
+		var data []byte
+		if data, err = b.Marshal(reply); err == nil {
+			return err
+		} else {
+			return c.Bytes(ContentType(b.String()), data)
+		}
 	}
 }

@@ -1,7 +1,6 @@
 package cosweb
 
 import (
-	"errors"
 	"io"
 	"math/rand"
 	"net/http"
@@ -33,10 +32,10 @@ func (this *Proxy) Route(s *Server, prefix string, method ...string) {
 	s.Register(r, this.handle, method...)
 }
 
-func (this *Proxy) handle(c *Context) (err error) {
+func (this *Proxy) handle(c *Context) any {
 	var target = this.GetTarget(c, this.target)
 	if &target == nil {
-		return errors.New("Proxy AddTarget empty")
+		return c.Errorf("Proxy AddTarget empty")
 	}
 	path := c.GetString(iProxyRoutePath, RequestDataTypeParam)
 	if !strings.HasPrefix(path, "/") {
@@ -51,9 +50,9 @@ func (this *Proxy) handle(c *Context) (err error) {
 
 	address := target.String()
 	var req *http.Request
-	req, err = http.NewRequest(c.Request.Method, address, c.Request.Body)
+	req, err := http.NewRequest(c.Request.Method, address, c.Request.Body)
 	if err != nil {
-		return
+		return c.Errorf(err)
 	}
 
 	copyHeader(c.Request.Header, &req.Header)
@@ -63,14 +62,14 @@ func (this *Proxy) handle(c *Context) (err error) {
 	var transport http.Transport
 	resp, err = transport.RoundTrip(req)
 	if err != nil {
-		return
+		return c.Errorf(err)
 	}
 
 	defer resp.Body.Close()
 	var body []byte
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return
+		return err
 	}
 
 	header := c.Response.Header()
@@ -78,8 +77,10 @@ func (this *Proxy) handle(c *Context) (err error) {
 	header.Add("Requested-Host", req.Host)
 
 	c.WriteHeader(resp.StatusCode)
-	c.Write(body)
-	return
+	if _, err = c.Write(body); err != nil {
+		return c.Errorf(err)
+	}
+	return nil
 }
 
 // 添加代理服务器地址

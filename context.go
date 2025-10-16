@@ -23,12 +23,10 @@ const (
 type Context struct {
 	body     []byte
 	query    url.Values
-	route    []string
 	params   map[string]string
 	values   values.Values
 	context  map[string]any //临时设置数据
 	Server   *Server
-	Binder   binder.Binder
 	Session  *session.Session
 	Request  *http.Request
 	Response http.ResponseWriter
@@ -44,7 +42,6 @@ func NewContext(s *Server) *Context {
 }
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
-	c.Binder = c.Server.Binder
 	c.Request = r
 	c.Response = w
 }
@@ -53,7 +50,7 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 func (c *Context) release() {
 	c.body = nil
 	c.query = nil
-	c.route = nil
+	//c.route = nil
 	c.params = nil
 	c.values = nil
 	c.context = nil
@@ -62,17 +59,25 @@ func (c *Context) release() {
 	c.Session.Release()
 }
 
-func (c *Context) doHandle(nodes []*registry.Router) (err error) {
+func (c *Context) doHandle(nodes []*registry.Node) error {
 	if len(nodes) == 0 {
 		return ErrNotFound
 	}
-	node := nodes[0]
-	handle, ok := node.Handle().(HandlerFunc)
+	node := nodes[len(nodes)-1]
+	handle, ok := node.Handler().(*Handler)
 	if !ok {
 		return ErrHandlerError
 	}
 	c.params = node.Params(c.Request.URL.Path)
-	return handle(c)
+
+	if !c.doMiddleware(handle.middleware) {
+		return nil
+	}
+	if reply, err := handle.Caller(node, c); err != nil {
+		return err
+	} else {
+		return handle.Serialize(c, reply)
+	}
 
 }
 
@@ -80,24 +85,12 @@ func (c *Context) doMiddleware(middleware []MiddlewareFunc) bool {
 	if len(middleware) == 0 {
 		return true
 	}
-	next := false
-	var fn = func() error { next = true; return nil }
 	for _, mf := range middleware {
-		if err := mf(c, fn); err != nil {
-			Errorf(c, err)
+		if !mf(c) {
 			return false
-		} else if !next {
-			return false
-		} else {
-			next = false
 		}
 	}
 	return true
-}
-
-// Route 当期匹配的路由
-func (c *Context) Route() string {
-	return strings.Join(c.route, "/")
 }
 
 // IsWebSocket 判断是否WebSocket
@@ -241,4 +234,26 @@ func (c *Context) Buffer() (b *bytes.Buffer, err error) {
 		}
 	}
 	return
+}
+
+// Errorf 封装一个错误
+func (c *Context) Errorf(format any, args ...any) error {
+	return Errorf(format, args...)
+}
+
+func (this *Context) Accept() binder.Binder {
+	header := this.Request.Header.Get(HeaderAccept)
+	if header == "" {
+		header = this.Request.Header.Get(HeaderContentType)
+	}
+	if header == "" {
+		return this.Server.Binder
+	}
+	arr := strings.Split(header, ",")
+	for _, s := range arr {
+		if b := binder.Get(s); b != nil {
+			return b
+		}
+	}
+	return this.Server.Binder
 }

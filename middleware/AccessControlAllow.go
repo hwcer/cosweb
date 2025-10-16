@@ -1,10 +1,11 @@
 package middleware
 
 import (
-	"github.com/hwcer/cosweb"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/hwcer/cosweb"
 )
 
 /*跨域
@@ -44,7 +45,7 @@ func (this *AccessControlAllow) Headers(headers ...string) {
 	this.headers = append(this.headers, headers...)
 }
 
-func (this *AccessControlAllow) Handle(c *cosweb.Context, next cosweb.Next) (err error) {
+func (this *AccessControlAllow) Handle(c *cosweb.Context) bool {
 	header := c.Header()
 
 	if len(this.origin) > 0 {
@@ -63,10 +64,13 @@ func (this *AccessControlAllow) Handle(c *cosweb.Context, next cosweb.Next) (err
 	if this.expire != "" {
 		header.Set("Access-Control-Max-Age", this.expire)
 	}
+	//UNITY
+	header.Set("X-Content-Type-Options", "nosniff")
+	header.Set("X-Frame-Options", "DENY")
+	header.Set("X-XSS-Protection", "1; mode=block")
 	if c.Request.Method == http.MethodOptions {
-		_, err = c.Write([]byte("options OK"))
-	} else {
-		err = next()
+		_, _ = c.Write([]byte("options OK"))
+		return false
 	}
-	return
+	return true
 }

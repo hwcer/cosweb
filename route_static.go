@@ -45,7 +45,7 @@ func (this *Static) Route() (r []string) {
 	return
 }
 
-func (this *Static) handle(c *Context) error {
+func (this *Static) handle(c *Context) any {
 	name := c.GetString(iStaticRoutePath, RequestDataTypeParam)
 	if name == "" {
 		name = this.index
@@ -54,7 +54,7 @@ func (this *Static) handle(c *Context) error {
 	if !strings.Contains(name, ".") {
 		file = filepath.Join(this.root, name, this.index)
 		if _, err := os.Stat(file); err != nil {
-			return ErrNotFound
+			return c.Errorf(ErrNotFound)
 		}
 	} else {
 		file = filepath.Join(this.root, name)
