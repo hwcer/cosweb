@@ -2,10 +2,9 @@ module github.com/hwcer/cosweb
 
 go 1.24.0
 
-replace github.com/hwcer/cosgo v1.5.10 => ../cosgo
 
 require (
-	github.com/hwcer/cosgo v1.5.10
+	github.com/hwcer/cosgo v1.5.11
 	github.com/hwcer/logger v0.2.4
 )
 
