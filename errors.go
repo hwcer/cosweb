@@ -7,7 +7,7 @@ import (
 	"github.com/hwcer/logger"
 )
 
-// var Errorf HTTPErrorHandler = defaultHTTPErrorHandler
+// var NewHTTPErrorf HTTPErrorHandler = defaultHTTPErrorHandler
 //
 // // DefaultHTTPErrorHandler is the default HTTP error handler. It sends a JSON Response
 // // with status code.
@@ -20,17 +20,6 @@ import (
 //		}
 //	}
 
-func Errorf(format any, args ...any) *HTTPError {
-	switch r := format.(type) {
-	case HTTPError:
-		return &r
-	case *HTTPError:
-		return r
-	default:
-		return NewHTTPError(0, format, args...)
-	}
-}
-
 // HTTPErrorHandler 仅仅处理系统错误,必定返回非200错误码
 var HTTPErrorHandler = func(c *Context, format any, args ...any) {
 	defer func() {
@@ -38,7 +27,7 @@ var HTTPErrorHandler = func(c *Context, format any, args ...any) {
 			logger.Error(err)
 		}
 	}()
-	he := Errorf(format, args...)
+	he := NewHTTPError(0, format, args...)
 	if he.Code == 0 || he.Code == http.StatusOK {
 		he.Code = http.StatusInternalServerError
 	}
@@ -91,6 +80,12 @@ func (he *HTTPError) String() string {
 
 // NewHTTPError creates a new HTTPError instance.
 func NewHTTPError(code int, format any, args ...any) *HTTPError {
+	switch r := format.(type) {
+	case HTTPError:
+		return &r
+	case *HTTPError:
+		return r
+	}
 	he := &HTTPError{Code: code}
 	if format == nil {
 		return he

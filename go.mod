@@ -2,10 +2,9 @@ module github.com/hwcer/cosweb
 
 go 1.24.0
 
-
 require (
-	github.com/hwcer/cosgo v1.5.11
-	github.com/hwcer/logger v0.2.4
+	github.com/hwcer/cosgo v1.5.12
+	github.com/hwcer/logger v0.2.6
 )
 
 require go.yaml.in/yaml/v3 v3.0.4 // indirect

@@ -17,7 +17,7 @@ type Next func() error
 type HandlerCaller func(node *registry.Node, c *Context) (interface{}, error)
 type HandlerFilter func(node *registry.Node) bool
 type MiddlewareFunc func(*Context) bool
-type HandlerSerialize func(c *Context, reply interface{}) (interface{}, error)
+type HandlerSerialize func(c *Context, reply interface{}) ([]byte, error)
 
 type Handler struct {
 	method     []string
@@ -53,7 +53,7 @@ func (h *Handler) useFromFunc(src any) {
 	if v, ok := src.(func(node *registry.Node) bool); ok {
 		h.filter = v
 	}
-	if v, ok := src.(func(c *Context, reply interface{}) (interface{}, error)); ok {
+	if v, ok := src.(func(c *Context, reply interface{}) ([]byte, error)); ok {
 		h.serialize = v
 	}
 	if v, ok := src.(func(*Context) bool); ok {
@@ -110,19 +110,15 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply any, err error)
 	return
 }
 
-func (this *Handler) format(c *Context, reply any) (any, error) {
+func (this *Handler) defaultSerialize(c *Context, reply any) ([]byte, error) {
 	if this.serialize != nil {
 		return this.serialize(c, reply)
 	}
-	if v, ok := reply.(error); ok {
-		return values.Error(v), nil
-	}
-	return reply, nil
+	b := c.Accept()
+	v := values.Parse(reply)
+	return b.Marshal(v)
 }
 func (this *Handler) Serialize(c *Context, reply any) (err error) {
-	if reply, err = this.format(c, reply); err != nil {
-		return err
-	}
 	b := c.Accept()
 	switch v := reply.(type) {
 	case []byte:
@@ -131,7 +127,7 @@ func (this *Handler) Serialize(c *Context, reply any) (err error) {
 		return c.Bytes(ContentType(b.String()), *v)
 	default:
 		var data []byte
-		if data, err = b.Marshal(reply); err != nil {
+		if data, err = this.defaultSerialize(c, reply); err != nil {
 			return err
 		} else {
 			return c.Bytes(ContentType(b.String()), data)

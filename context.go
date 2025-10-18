@@ -23,6 +23,7 @@ const (
 type Context struct {
 	body     []byte
 	query    url.Values
+	accept   binder.Binder //客户端接受的序列化方式
 	params   map[string]string
 	values   values.Values
 	context  map[string]any //临时设置数据
@@ -50,7 +51,7 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 func (c *Context) release() {
 	c.body = nil
 	c.query = nil
-	//c.route = nil
+	c.accept = nil
 	c.params = nil
 	c.values = nil
 	c.context = nil
@@ -238,22 +239,27 @@ func (c *Context) Buffer() (b *bytes.Buffer, err error) {
 
 // Errorf 封装一个错误
 func (c *Context) Errorf(format any, args ...any) error {
-	return Errorf(format, args...)
+	return values.Errorf(0, format, args...)
 }
 
 func (this *Context) Accept() binder.Binder {
+	if this.accept != nil {
+		return this.accept
+	}
 	header := this.Request.Header.Get(HeaderAccept)
 	if header == "" {
 		header = this.Request.Header.Get(HeaderContentType)
 	}
 	if header == "" {
-		return this.Server.Binder
+		this.accept = this.Server.Binder
+		return this.accept
 	}
 	arr := strings.Split(header, ",")
 	for _, s := range arr {
-		if b := binder.Get(s); b != nil {
-			return b
+		if this.accept = binder.Get(s); this.accept != nil {
+			return this.accept
 		}
 	}
-	return this.Server.Binder
+	this.accept = this.Server.Binder
+	return this.accept
 }
