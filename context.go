@@ -74,10 +74,10 @@ func (c *Context) doHandle(nodes []*registry.Node) error {
 	if !c.doMiddleware(handle.middleware) {
 		return nil
 	}
-	if reply, err := handle.Caller(node, c); err != nil {
+	if reply, err := handle.handle(node, c); err != nil {
 		return err
 	} else {
-		return handle.Serialize(c, reply)
+		return handle.write(c, reply)
 	}
 
 }

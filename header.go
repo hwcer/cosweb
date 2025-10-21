@@ -57,20 +57,21 @@ const (
 
 // MIME types
 const (
-	ContentTypeTextHTML            ContentType = "text/html"
-	ContentTypeTextPlain                       = "text/plain"
-	ContentTypeTextXML                         = "text/xml"
-	ContentTypeApplicationJS                   = "application/javascript"
-	ContentTypeApplicationXML                  = "application/xml"
-	ContentTypeApplicationJSON                 = "application/json"
-	ContentTypeApplicationProtobuf             = "application/protobuf"
-	ContentTypeApplicationMsgpack              = "application/msgpack"
-	ContentTypePROTOBUF                        = "application/x-protobuf"
-	ContentTypeMSGPACKX                        = "application/x-msgpack"
-	ContentTypeMSGPACK                         = "application/msgpack"
-	ContentTypeOctetStream                     = "application/octet-stream"
-	ContentTypeMultipartForm                   = "multipart/form-store"
-	ContentTypeApplicationForm                 = "application/x-www-form-urlencoded"
+	ContentTypeTextHTML              ContentType = "text/html"
+	ContentTypeTextPlain                         = "text/plain"
+	ContentTypeTextXML                           = "text/xml"
+	ContentTypeApplicationJS                     = "application/javascript"
+	ContentTypeApplicationXML                    = "application/xml"
+	ContentTypeApplicationJSON                   = "application/json"
+	ContentTypeApplicationProtobuf               = "application/protobuf"
+	ContentTypeApplicationMsgpack                = "application/msgpack"
+	ContentTypePROTOBUF                          = "application/x-protobuf"
+	ContentTypeMSGPACKX                          = "application/x-msgpack"
+	ContentTypeMSGPACK                           = "application/msgpack"
+	ContentTypeOctetStream                       = "application/octet-stream"
+	ContentTypeMultipartForm                     = "multipart/form-store"
+	ContentTypeApplicationForm                   = "application/x-www-form-urlencoded"
+	ContentTypeApplicationJavaScript             = "application/javascript"
 )
 
 // GetContentTypeCharset

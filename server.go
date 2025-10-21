@@ -15,19 +15,16 @@ import (
 	"golang.org/x/net/context"
 )
 
-type (
-	// Server is the top-level framework instance.
-	Server struct {
-		pool            sync.Pool
-		middleware      []MiddlewareFunc //全局中间件
-		Binder          binder.Binder    //默认序列化方式
-		Render          Render
-		Server          *http.Server
-		Registry        *registry.Registry
-		RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
-	}
-	HandlerFunc func(*Context) any
-)
+// Server is the top-level framework instance.
+type Server struct {
+	pool            sync.Pool
+	middleware      []MiddlewareFunc //全局中间件
+	Binder          binder.Binder    //默认序列化方式
+	Render          Render
+	Server          *http.Server
+	Registry        *registry.Registry
+	RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
+}
 
 var (
 	AnyHttpMethod = []string{
@@ -64,13 +61,13 @@ func (srv *Server) Use(i MiddlewareFunc) {
 
 // GET registers a new GET Register for a path with matching handler in the Router
 // with optional Register-level middleware.
-func (srv *Server) GET(path string, h HandlerFunc) {
+func (srv *Server) GET(path string, h func(*Context) any) {
 	srv.Register(path, h, http.MethodGet)
 }
 
 // POST registers a new POST Register for a path with matching handler in the
 // Router with optional Register-level middleware.
-func (srv *Server) POST(path string, h HandlerFunc) {
+func (srv *Server) POST(path string, h func(*Context) any) {
 	srv.Register(path, h, http.MethodPost)
 }
 
@@ -96,20 +93,21 @@ func (srv *Server) Static(prefix, root string, method ...string) *Static {
 }
 
 // Service 使用Registry的Service批量注册struct
-func (srv *Server) Service(name string, handlers ...any) *registry.Service {
+func (srv *Server) Service(name ...string) *registry.Service {
 	handler := &Handler{}
-	service := srv.Registry.Service(name, handler)
-	service.SetMethods(AnyHttpMethod)
-	for _, i := range handlers {
-		handler.Use(i)
+	var s string
+	if len(name) > 0 {
+		s = name[0]
 	}
+	service := srv.Registry.Service(s, handler)
+	service.SetMethods(AnyHttpMethod)
 	return service
 }
 
 // Register AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
-func (srv *Server) Register(route string, handler HandlerFunc, method ...string) {
-	service := srv.Service("")
+func (srv *Server) Register(route string, handler func(*Context) any, method ...string) {
+	service := srv.Service()
 	var err error
 	if len(method) == 0 {
 		err = service.Register(handler, route)

@@ -12,7 +12,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/hwcer/cosgo/values"
 )
 
 type Response struct {
@@ -57,8 +58,22 @@ func (c *Context) Header() http.Header {
 }
 
 // Write writes the store to the connection as part of an HTTP reply.
-func (c *Context) Write(b []byte) (n int, err error) {
-	return c.Response.Write(b)
+func (c *Context) Write(reply any) error {
+	b := c.Accept()
+	switch v := reply.(type) {
+	case []byte:
+		return c.Bytes(ContentType(b.String()), v)
+	case *[]byte:
+		return c.Bytes(ContentType(b.String()), *v)
+	default:
+		msg := values.Parse(reply)
+		data, err := b.Marshal(msg)
+		if err != nil {
+			return err
+		} else {
+			return c.Bytes(ContentType(b.String()), data)
+		}
+	}
 }
 func (c *Context) WriteHeader(code int) {
 	c.Response.WriteHeader(code)
@@ -77,7 +92,7 @@ func (c *Context) contentDisposition(file, name, dispositionType string) error {
 
 func (c *Context) Bytes(contentType ContentType, b []byte) (err error) {
 	c.writeContentType(contentType)
-	_, err = c.Write(b)
+	_, err = c.Response.Write(b)
 	return
 }
 func (c *Context) Render(name string, data interface{}) (err error) {
@@ -157,9 +172,4 @@ func (c *Context) JSON(i interface{}) error {
 		return err
 	}
 	return c.Bytes(ContentTypeApplicationJSON, data)
-}
-
-// contains 检查字符串s是否包含子串substr
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
 }

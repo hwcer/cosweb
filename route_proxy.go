@@ -77,7 +77,7 @@ func (this *Proxy) handle(c *Context) any {
 	header.Add("Requested-Host", req.Host)
 
 	c.WriteHeader(resp.StatusCode)
-	if _, err = c.Write(body); err != nil {
+	if _, err = c.Response.Write(body); err != nil {
 		return c.Errorf(err)
 	}
 	return nil

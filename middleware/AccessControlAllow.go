@@ -64,12 +64,15 @@ func (this *AccessControlAllow) Handle(c *cosweb.Context) bool {
 	if this.expire != "" {
 		header.Set("Access-Control-Max-Age", this.expire)
 	}
-	//UNITY
-	header.Set("X-Content-Type-Options", "nosniff")
-	header.Set("X-Frame-Options", "DENY")
-	header.Set("X-XSS-Protection", "1; mode=block")
+	//UNITY - 仅在 Unity 请求时添加这些安全头
+	userAgent := c.Request.Header.Get("User-Agent")
+	if strings.Contains(strings.ToLower(userAgent), "unity") {
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("X-Frame-Options", "DENY")
+		header.Set("X-XSS-Protection", "1; mode=block")
+	}
 	if c.Request.Method == http.MethodOptions {
-		_, _ = c.Write([]byte("options OK"))
+		_, _ = c.Response.Write([]byte("options OK"))
 		return false
 	}
 	return true

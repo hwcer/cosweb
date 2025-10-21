@@ -13,10 +13,18 @@ import (
 	"github.com/hwcer/logger"
 )
 
-const iStaticRoutePath = "_StaticRoutePath"
+const StaticRoutePath = "_StaticRoutePath"
 
 func init() {
 	_ = mime.AddExtensionType(".mjs", "text/javascript")
+}
+
+func (c *Context) FileServer() bool {
+	s := c.GetString(StaticRoutePath, RequestDataTypeParam)
+	if s == "" {
+		return false
+	}
+	return strings.HasSuffix(c.Request.URL.Path, s)
 }
 
 type Static struct {
@@ -41,12 +49,12 @@ func (this *Static) Route() (r []string) {
 	prefix := registry.Route(this.prefix)
 	prefix = strings.TrimSuffix(prefix, "*")
 	prefix = strings.TrimSuffix(prefix, "/")
-	r = append(r, fmt.Sprintf("%s/*%s", prefix, iStaticRoutePath))
+	r = append(r, fmt.Sprintf("%s/*%s", prefix, StaticRoutePath))
 	return
 }
 
 func (this *Static) handle(c *Context) any {
-	name := c.GetString(iStaticRoutePath, RequestDataTypeParam)
+	name := c.GetString(StaticRoutePath, RequestDataTypeParam)
 	if name == "" {
 		name = this.index
 	}
@@ -61,5 +69,6 @@ func (this *Static) handle(c *Context) any {
 	}
 
 	http.ServeFile(c.Response, c.Request, file)
+
 	return nil
 }

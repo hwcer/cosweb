@@ -9,59 +9,69 @@ import (
 	"github.com/hwcer/logger"
 )
 
+type HandlerFunc func(*Context) any
+
 // registry 通过registry集中注册对象
 type handleCaller interface {
 	Caller(node *registry.Node, c *Context) any
 }
-type Next func() error
+
+// type Next func() error
 type HandlerCaller func(node *registry.Node, c *Context) (interface{}, error)
 type HandlerFilter func(node *registry.Node) bool
 type MiddlewareFunc func(*Context) bool
 type HandlerSerialize func(c *Context, reply interface{}) ([]byte, error)
 
 type Handler struct {
-	method     []string
+	//method     []string
 	caller     HandlerCaller //自定义全局消息调用
 	filter     HandlerFilter
 	serialize  HandlerSerialize //消息序列化封装
 	middleware []MiddlewareFunc
 }
 
-func (h *Handler) Use(src interface{}) {
-	switch v := src.(type) {
-	case HandlerCaller:
-		h.caller = v
-	case HandlerFilter:
-		h.filter = v
-	case HandlerSerialize:
-		h.serialize = v
-	case MiddlewareFunc:
-		h.middleware = append(h.middleware, v)
-	case []string:
-		h.method = append(h.method, v...)
-	default:
-		h.useFromFunc(src)
+// Use middleware
+func (h *Handler) Use(middleware ...func(*Context) bool) {
+	for _, m := range middleware {
+		h.middleware = append(h.middleware, m)
 	}
 }
-func (h *Handler) useFromFunc(src any) {
-	if v, ok := src.(func(node *registry.Node, c *Context) (interface{}, error)); ok {
-		h.caller = v
-	}
-	if v, ok := src.(HandlerCaller); ok {
-		h.caller = v
-	}
-	if v, ok := src.(func(node *registry.Node) bool); ok {
-		h.filter = v
-	}
-	if v, ok := src.(func(c *Context, reply interface{}) ([]byte, error)); ok {
-		h.serialize = v
-	}
-	if v, ok := src.(func(*Context) bool); ok {
-		h.middleware = append(h.middleware, v)
-	}
-	if v, ok := src.([]string); ok {
-		h.method = append(h.method, v...)
-	}
+
+//func (h *Handler) useFromFunc(src any) {
+//	if v, ok := src.(func(node *registry.Node, c *Context) (interface{}, error)); ok {
+//		h.caller = v
+//	}
+//	if v, ok := src.(HandlerCaller); ok {
+//		h.caller = v
+//	}
+//	if v, ok := src.(func(node *registry.Node) bool); ok {
+//		h.filter = v
+//	}
+//	if v, ok := src.(func(c *Context, reply interface{}) ([]byte, error)); ok {
+//		h.serialize = v
+//	}
+//	if v, ok := src.(func(*Context) bool); ok {
+//		h.middleware = append(h.middleware, v)
+//	}
+//	if v, ok := src.([]string); ok {
+//		h.method = append(h.method, v...)
+//	}
+//}
+
+//func (h *Handler) SetMethod(method ...string) {
+//	h.method = method
+//}
+
+func (h *Handler) SetCaller(caller func(node *registry.Node, c *Context) (interface{}, error)) {
+	h.caller = caller
+}
+
+func (h *Handler) SetFilter(filter func(node *registry.Node) bool) {
+	h.filter = filter
+}
+
+func (h *Handler) SetSerialize(serialize func(c *Context, reply interface{}) ([]byte, error)) {
+	h.serialize = serialize
 }
 
 func (h *Handler) Filter(node *registry.Node) bool {
@@ -70,7 +80,7 @@ func (h *Handler) Filter(node *registry.Node) bool {
 	}
 	if node.IsFunc() {
 		i := node.Method()
-		_, ok := i.(HandlerFunc)
+		_, ok := i.(func(*Context) any)
 		return ok
 	} else if node.IsMethod() {
 		t := node.Value().Type()
@@ -88,7 +98,7 @@ func (h *Handler) Filter(node *registry.Node) bool {
 	return true
 }
 
-func (h *Handler) Caller(node *registry.Node, c *Context) (reply any, err error) {
+func (h *Handler) handle(node *registry.Node, c *Context) (reply any, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = ErrInternalServerError
@@ -99,7 +109,7 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply any, err error)
 		return h.caller(node, c)
 	}
 	if node.IsFunc() {
-		f, _ := node.Method().(HandlerFunc)
+		f, _ := node.Method().(func(*Context) any)
 		reply = f(c)
 	} else if s, ok := node.Binder().(handleCaller); ok {
 		reply = s.Caller(node, c)
@@ -110,15 +120,7 @@ func (h *Handler) Caller(node *registry.Node, c *Context) (reply any, err error)
 	return
 }
 
-func (this *Handler) defaultSerialize(c *Context, reply any) ([]byte, error) {
-	if this.serialize != nil {
-		return this.serialize(c, reply)
-	}
-	b := c.Accept()
-	v := values.Parse(reply)
-	return b.Marshal(v)
-}
-func (this *Handler) Serialize(c *Context, reply any) (err error) {
+func (this *Handler) write(c *Context, reply any) (err error) {
 	b := c.Accept()
 	switch v := reply.(type) {
 	case []byte:
@@ -133,4 +135,13 @@ func (this *Handler) Serialize(c *Context, reply any) (err error) {
 			return c.Bytes(ContentType(b.String()), data)
 		}
 	}
+}
+
+func (this *Handler) defaultSerialize(c *Context, reply any) ([]byte, error) {
+	if this.serialize != nil {
+		return this.serialize(c, reply)
+	}
+	b := c.Accept()
+	v := values.Parse(reply)
+	return b.Marshal(v)
 }

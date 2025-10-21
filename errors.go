@@ -35,7 +35,7 @@ var HTTPErrorHandler = func(c *Context, format any, args ...any) {
 	if he.Message == "" {
 		he.Message = http.StatusText(he.Code)
 	}
-	if _, err := c.Write([]byte(he.Message)); err != nil {
+	if _, err := c.Response.Write([]byte(he.Message)); err != nil {
 		logger.Error(err)
 	}
 }
@@ -49,6 +49,7 @@ type HTTPError struct {
 // Errors
 var (
 	ErrNotFound             = NewHTTPError(http.StatusNotFound, http.StatusText(http.StatusNotFound))
+	ErrForbidden            = NewHTTPError(http.StatusForbidden, http.StatusText(http.StatusForbidden))
 	ErrInternalServerError  = NewHTTPError(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	ErrInvalidCertOrKeyType = NewHTTPError(0, "invalid cert or key type, must be string or []byte")
 	ErrHandlerError         = NewHTTPError(0, "handler type error")
