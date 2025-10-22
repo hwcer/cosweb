@@ -42,15 +42,17 @@ func (res *Response) Write(b []byte) (n int, err error) {
 	if !res.CanWrite() {
 		return 0, nil
 	}
-	res.canWrite = false
 	if res.status == 0 {
 		res.WriteHeader(http.StatusOK)
 	}
+	res.canWrite = false
 	return res.ResponseWriter.Write(b)
 }
 func (res *Response) WriteHeader(code int) {
-	res.status = code
-	res.ResponseWriter.WriteHeader(code)
+	if res.CanWrite() {
+		res.status = code
+		res.ResponseWriter.WriteHeader(code)
+	}
 }
 
 func (c *Context) Header() http.Header {
