@@ -27,6 +27,9 @@ var HTTPErrorHandler = func(c *Context, format any, args ...any) {
 			logger.Error(err)
 		}
 	}()
+	if !c.Response.CanWrite() {
+		return
+	}
 	he := NewHTTPError(0, format, args...)
 	if he.Code == 0 || he.Code == http.StatusOK {
 		he.Code = http.StatusInternalServerError

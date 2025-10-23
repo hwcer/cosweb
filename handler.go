@@ -5,7 +5,6 @@ import (
 	"runtime/debug"
 
 	"github.com/hwcer/cosgo/registry"
-	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/logger"
 )
 
@@ -36,31 +35,6 @@ func (h *Handler) Use(middleware ...func(*Context) bool) {
 		h.middleware = append(h.middleware, m)
 	}
 }
-
-//func (h *Handler) useFromFunc(src any) {
-//	if v, ok := src.(func(node *registry.Node, c *Context) (interface{}, error)); ok {
-//		h.caller = v
-//	}
-//	if v, ok := src.(HandlerCaller); ok {
-//		h.caller = v
-//	}
-//	if v, ok := src.(func(node *registry.Node) bool); ok {
-//		h.filter = v
-//	}
-//	if v, ok := src.(func(c *Context, reply interface{}) ([]byte, error)); ok {
-//		h.serialize = v
-//	}
-//	if v, ok := src.(func(*Context) bool); ok {
-//		h.middleware = append(h.middleware, v)
-//	}
-//	if v, ok := src.([]string); ok {
-//		h.method = append(h.method, v...)
-//	}
-//}
-
-//func (h *Handler) SetMethod(method ...string) {
-//	h.method = method
-//}
 
 func (h *Handler) SetCaller(caller func(node *registry.Node, c *Context) (interface{}, error)) {
 	h.caller = caller
@@ -120,7 +94,10 @@ func (h *Handler) handle(node *registry.Node, c *Context) (reply any, err error)
 	return
 }
 
-func (this *Handler) write(c *Context, reply any) (err error) {
+func (h *Handler) write(c *Context, reply any) (err error) {
+	if !c.Response.CanWrite() {
+		return nil
+	}
 	b := c.Accept()
 	switch v := reply.(type) {
 	case []byte:
@@ -129,7 +106,7 @@ func (this *Handler) write(c *Context, reply any) (err error) {
 		return c.Bytes(ContentType(b.String()), *v)
 	default:
 		var data []byte
-		if data, err = this.defaultSerialize(c, reply); err != nil {
+		if data, err = h.defaultSerialize(c, reply); err != nil {
 			return err
 		} else {
 			return c.Bytes(ContentType(b.String()), data)
@@ -137,11 +114,10 @@ func (this *Handler) write(c *Context, reply any) (err error) {
 	}
 }
 
-func (this *Handler) defaultSerialize(c *Context, reply any) ([]byte, error) {
-	if this.serialize != nil {
-		return this.serialize(c, reply)
+func (h *Handler) defaultSerialize(c *Context, reply any) ([]byte, error) {
+	if h.serialize != nil {
+		return h.serialize(c, reply)
 	}
 	b := c.Accept()
-	v := values.Parse(reply)
-	return b.Marshal(v)
+	return b.Marshal(reply)
 }
