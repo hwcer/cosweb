@@ -5,6 +5,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -24,7 +25,8 @@ func (c *Context) FileServer() bool {
 	if s == "" {
 		return false
 	}
-	return strings.HasSuffix(c.Request.URL.Path, s)
+	p := path.Clean(c.Request.URL.Path)
+	return strings.HasSuffix(p, s)
 }
 
 type Static struct {
@@ -67,8 +69,8 @@ func (this *Static) handle(c *Context) any {
 	} else {
 		file = filepath.Join(this.root, name)
 	}
-
-	http.ServeFile(c.Response, c.Request, file)
+	c.Response.hijacked = true
+	http.ServeFile(c.Response.ResponseWriter, c.Request, file)
 
 	return nil
 }
