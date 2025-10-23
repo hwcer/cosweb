@@ -246,15 +246,15 @@ func (this *Context) Accept() binder.Binder {
 	if this.accept != nil {
 		return this.accept
 	}
-	header := this.Request.Header.Get(HeaderAccept)
-	if header == "" {
-		header = this.Request.Header.Get(HeaderContentType)
+	var arr []string
+	if header := this.Request.Header.Get(HeaderAccept); header != "" {
+		arr = strings.Split(header, ",")
 	}
-	if header == "" {
-		this.accept = this.Server.Binder
-		return this.accept
+
+	if header := this.Request.Header.Get(HeaderContentType); header == "" {
+		arr = append(arr, strings.Split(header, ",")...)
 	}
-	arr := strings.Split(header, ",")
+
 	for _, s := range arr {
 		if this.accept = binder.Get(s); this.accept != nil {
 			return this.accept

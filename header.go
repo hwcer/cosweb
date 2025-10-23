@@ -1,5 +1,7 @@
 package cosweb
 
+import "github.com/hwcer/cosgo/binder"
+
 var Charset = "UTF-8"
 
 type ContentType string
@@ -77,4 +79,11 @@ const (
 // GetContentTypeCharset
 func GetContentTypeCharset(contentType ContentType) string {
 	return string(contentType) + "; charset=" + Charset
+}
+
+func init() {
+	//默认非静态文件和模版引擎的情况下，浏览器请求返回的数据使用JSON序列化
+	ct := string(ContentTypeTextHTML)
+	binder.SetMimeType(100, "HTML", ct)
+	_ = binder.Register(ct, binder.Json)
 }
