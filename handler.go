@@ -106,18 +106,20 @@ func (h *Handler) write(c *Context, reply any) (err error) {
 		return c.Bytes(ContentType(b.String()), *v)
 	default:
 		var data []byte
-		if data, err = h.defaultSerialize(c, reply); err != nil {
-			return err
+		if h.serialize != nil {
+			data, err = h.serialize(c, reply)
 		} else {
+			data, err = h.defaultSerialize(c, reply)
+		}
+		if err == nil {
 			return c.Bytes(ContentType(b.String()), data)
+		} else {
+			return err
 		}
 	}
 }
 
 func (h *Handler) defaultSerialize(c *Context, reply any) ([]byte, error) {
-	if h.serialize != nil {
-		return h.serialize(c, reply)
-	}
 	b := c.Accept()
 	return b.Marshal(reply)
 }
