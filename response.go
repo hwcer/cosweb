@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-
-	"github.com/hwcer/cosgo/values"
 )
 
 type Response struct {
@@ -68,8 +66,7 @@ func (c *Context) Write(reply any) error {
 	case *[]byte:
 		return c.Bytes(ContentType(b.String()), *v)
 	default:
-		msg := values.Parse(reply)
-		data, err := b.Marshal(msg)
+		data, err := b.Marshal(reply)
 		if err != nil {
 			return err
 		} else {

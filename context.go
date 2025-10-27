@@ -71,27 +71,35 @@ func (c *Context) doHandle(nodes []*registry.Node) error {
 	}
 	c.params = node.Params(c.Request.URL.Path)
 
-	if !c.doMiddleware(handle.middleware) {
-		return nil
+	if err := c.doMiddleware(handle.middleware); err != nil {
+		return err
 	}
 	if reply, err := handle.handle(node, c); err != nil {
 		return err
 	} else {
 		return handle.write(c, reply)
 	}
-
 }
 
-func (c *Context) doMiddleware(middleware []MiddlewareFunc) bool {
+func (c *Context) doMiddleware(middleware []MiddlewareFunc) (err error) {
 	if len(middleware) == 0 {
-		return true
+		return nil
+	}
+	next := false
+	var cb Next = func() error {
+		next = true
+		return nil
 	}
 	for _, mf := range middleware {
-		if !mf(c) {
-			return false
+		if err = mf(c, cb); err != nil {
+			return
 		}
+		if !next {
+			return nil
+		}
+		next = false
 	}
-	return true
+	return
 }
 
 // IsWebSocket 判断是否WebSocket

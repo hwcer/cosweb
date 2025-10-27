@@ -151,7 +151,8 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//srv
-	if !c.doMiddleware(srv.middleware) {
+	if err := c.doMiddleware(srv.middleware); err != nil {
+		HTTPErrorHandler(c, err)
 		return
 	}
 	nodes := srv.Registry.Search(c.Request.Method, c.Request.URL.Path)

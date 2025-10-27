@@ -45,7 +45,7 @@ func (this *AccessControlAllow) Headers(headers ...string) {
 	this.headers = append(this.headers, headers...)
 }
 
-func (this *AccessControlAllow) Handle(c *cosweb.Context) bool {
+func (this *AccessControlAllow) Handle(c *cosweb.Context, next cosweb.Next) error {
 	header := c.Header()
 
 	if len(this.origin) > 0 {
@@ -73,7 +73,8 @@ func (this *AccessControlAllow) Handle(c *cosweb.Context) bool {
 	}
 	if c.Request.Method == http.MethodOptions {
 		_, _ = c.Response.Write([]byte("options OK"))
-		return false
+		return nil
 	}
-	return true
+	return next()
+
 }

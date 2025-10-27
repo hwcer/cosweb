@@ -15,10 +15,10 @@ type handleCaller interface {
 	Caller(node *registry.Node, c *Context) any
 }
 
-// type Next func() error
+type Next func() error
 type HandlerCaller func(node *registry.Node, c *Context) (interface{}, error)
 type HandlerFilter func(node *registry.Node) bool
-type MiddlewareFunc func(*Context) bool
+type MiddlewareFunc func(*Context, Next) error
 type HandlerSerialize func(c *Context, reply interface{}) ([]byte, error)
 
 type Handler struct {
@@ -30,7 +30,7 @@ type Handler struct {
 }
 
 // Use middleware
-func (h *Handler) Use(middleware ...func(*Context) bool) {
+func (h *Handler) Use(middleware ...func(*Context, Next) error) {
 	for _, m := range middleware {
 		h.middleware = append(h.middleware, m)
 	}
