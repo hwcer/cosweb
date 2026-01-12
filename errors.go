@@ -7,19 +7,6 @@ import (
 	"github.com/hwcer/logger"
 )
 
-// var NewHTTPErrorf HTTPErrorHandler = defaultHTTPErrorHandler
-//
-// // DefaultHTTPErrorHandler is the default HTTP error handler. It sends a JSON Response
-// // with status code.
-//
-//	func defaultHTTPErrorHandler(c *Context, err error) {
-//		if ct := c.Request.Header.Get(HeaderAccept); ct != "" && strings.Contains(ct, string(ContentTypeTextHTML)) {
-//			_ = c.HTML(err.Error())
-//		} else {
-//			_ = c.JSON(values.Error(err))
-//		}
-//	}
-
 // HTTPErrorHandler 仅仅处理系统错误,必定返回非200错误码
 var HTTPErrorHandler = func(c *Context, format any, args ...any) {
 	defer func() {
