@@ -64,7 +64,7 @@ func (this *Static) handle(c *Context) any {
 	if !strings.Contains(name, ".") {
 		file = filepath.Join(this.root, name, this.index)
 		if _, err := os.Stat(file); err != nil {
-			return c.Errorf(ErrNotFound)
+			return c.Error(ErrNotFound)
 		}
 	} else {
 		file = filepath.Join(this.root, name)

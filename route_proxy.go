@@ -35,7 +35,7 @@ func (this *Proxy) Route(s *Server, prefix string, method ...string) {
 func (this *Proxy) handle(c *Context) any {
 	var target = this.GetTarget(c, this.target)
 	if &target == nil {
-		return c.Errorf("Proxy AddTarget empty")
+		return c.Error("Proxy AddTarget empty")
 	}
 	path := c.GetString(iProxyRoutePath, RequestDataTypeParam)
 	if !strings.HasPrefix(path, "/") {
@@ -52,7 +52,7 @@ func (this *Proxy) handle(c *Context) any {
 	var req *http.Request
 	req, err := http.NewRequest(c.Request.Method, address, c.Request.Body)
 	if err != nil {
-		return c.Errorf(err)
+		return c.Error(err)
 	}
 
 	copyHeader(c.Request.Header, &req.Header)
@@ -62,7 +62,7 @@ func (this *Proxy) handle(c *Context) any {
 	var transport http.Transport
 	resp, err = transport.RoundTrip(req)
 	if err != nil {
-		return c.Errorf(err)
+		return c.Error(err)
 	}
 
 	defer resp.Body.Close()
@@ -78,7 +78,7 @@ func (this *Proxy) handle(c *Context) any {
 
 	c.WriteHeader(resp.StatusCode)
 	if _, err = c.Response.Write(body); err != nil {
-		return c.Errorf(err)
+		return c.Error(err)
 	}
 	return nil
 }
