@@ -245,9 +245,13 @@ func (c *Context) Buffer() (b *bytes.Buffer, err error) {
 	return
 }
 
+func (c *Context) Error(format any) error {
+	return values.Error(format)
+}
+
 // Errorf 封装一个错误
-func (c *Context) Errorf(format any, args ...any) error {
-	return values.Errorf(0, format, args...)
+func (c *Context) Errorf(code int32, format any, args ...any) error {
+	return values.Errorf(code, format, args...)
 }
 
 func (this *Context) Accept() binder.Binder {
