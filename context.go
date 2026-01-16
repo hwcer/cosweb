@@ -60,25 +60,21 @@ func (c *Context) release() {
 	c.Session.Release()
 }
 
-func (c *Context) doHandle(nodes []*registry.Node) error {
-	if len(nodes) == 0 {
-		return ErrNotFound
-	}
-	node := nodes[0]
+func (c *Context) doHandle(node *registry.Node, params map[string]string) error {
 	handle, ok := node.Handler().(*Handler)
 	if !ok {
 		return ErrHandlerError
 	}
-	c.params = node.Params(c.Request.URL.Path)
+	c.params = params
 
 	if err := c.doMiddleware(handle.middleware); err != nil {
 		return err
 	}
-	if reply, err := handle.handle(node, c); err != nil {
+	reply, err := handle.handle(node, c)
+	if err != nil {
 		return err
-	} else {
-		return handle.write(c, reply)
 	}
+	return handle.write(c, reply)
 }
 
 func (c *Context) doMiddleware(middleware []MiddlewareFunc) (err error) {

@@ -5,7 +5,6 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -14,20 +13,20 @@ import (
 	"github.com/hwcer/logger"
 )
 
-const StaticRoutePath = "_StaticRoutePath"
+//const StaticRoutePath = "_StaticRoutePath"
 
 func init() {
 	_ = mime.AddExtensionType(".mjs", "text/javascript")
 }
 
-func (c *Context) FileServer() bool {
-	s := c.GetString(StaticRoutePath, RequestDataTypeParam)
-	if s == "" {
-		return false
-	}
-	p := path.Clean(c.Request.URL.Path)
-	return strings.HasSuffix(p, s)
-}
+//func (c *Context) FileServer() bool {
+//	//s := c.GetString(StaticRoutePath, RequestDataTypeParam)
+//	//if s == "" {
+//	//	return false
+//	//}
+//	p := path.Clean(c.Request.URL.Path)
+//	return strings.HasSuffix(p, s)
+//}
 
 type Static struct {
 	root   string
@@ -36,6 +35,7 @@ type Static struct {
 }
 
 func NewStatic(prefix string, root string) *Static {
+	prefix = registry.Route(prefix)
 	s := &Static{prefix: prefix, root: cosgo.Abs(root)}
 	s.index = "index.html"
 	return s
@@ -47,16 +47,12 @@ func (this *Static) Index(f string) {
 		this.index = f
 	}
 }
-func (this *Static) Route() (r []string) {
-	prefix := registry.Route(this.prefix)
-	prefix = strings.TrimSuffix(prefix, "*")
-	prefix = strings.TrimSuffix(prefix, "/")
-	r = append(r, fmt.Sprintf("%s/*%s", prefix, StaticRoutePath))
-	return
+func (this *Static) Route() (r string) {
+	return fmt.Sprintf("%s/*", this.prefix)
 }
 
 func (this *Static) handle(c *Context) any {
-	name := c.GetString(StaticRoutePath, RequestDataTypeParam)
+	name := strings.TrimPrefix(c.Request.URL.Path, this.prefix)
 	if name == "" {
 		name = this.index
 	}

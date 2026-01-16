@@ -86,9 +86,7 @@ func (srv *Server) Static(prefix, root string, method ...string) *Static {
 	if len(method) == 0 {
 		method = []string{http.MethodGet}
 	}
-	for _, r := range static.Route() {
-		srv.Register(r, static.handle, method...)
-	}
+	srv.Register(static.Route(), static.handle, method...)
 	return static
 }
 
@@ -155,8 +153,12 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HTTPErrorHandler(c, err)
 		return
 	}
-	nodes := srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
-	if err := c.doHandle(nodes); err != nil {
+	node, params := srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
+	if node == nil {
+		HTTPErrorHandler(c, ErrNotFound)
+		return
+	}
+	if err := c.doHandle(node, params); err != nil {
 		HTTPErrorHandler(c, err)
 	}
 }
