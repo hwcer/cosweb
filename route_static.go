@@ -52,7 +52,7 @@ func (this *Static) Route() (r string) {
 }
 
 func (this *Static) handle(c *Context) any {
-	name := strings.TrimPrefix(c.Request.URL.Path, this.prefix)
+	name := c.GetString(registry.PathMatchVague, RequestDataTypeParam)
 	if name == "" {
 		name = this.index
 	}
