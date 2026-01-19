@@ -340,9 +340,14 @@ func (c *Context) Buffer() (b *bytes.Buffer, err error) {
 	}
 	b = bytes.NewBuffer([]byte{})
 	defer func() {
-		// 只有当内容大小小于等于最大缓存大小时才缓存
-		if b.Len() <= int(c.Server.MaxCacheSize) {
-			c.body = b.Bytes()
+		// 只有在没有错误的情况下才恢复 c.Request.Body 和缓存数据
+		if err == nil {
+			// 恢复 c.Request.Body，使其可重复读取
+			c.Request.Body = io.NopCloser(bytes.NewReader(b.Bytes()))
+			// 只有当内容大小小于等于最大缓存大小时才缓存
+			if b.Len() <= int(c.Server.MaxCacheSize) {
+				c.body = b.Bytes()
+			}
 		}
 	}()
 	var n int64
