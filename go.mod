@@ -2,10 +2,8 @@ module github.com/hwcer/cosweb
 
 go 1.24.0
 
-replace github.com/hwcer/cosgo v1.6.5 => ../cosgo
-
 require (
-	github.com/hwcer/cosgo v1.6.5
+	github.com/hwcer/cosgo v1.6.6
 	github.com/hwcer/logger v0.2.8
 )
 
@@ -17,7 +15,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/onsi/gomega v1.39.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
