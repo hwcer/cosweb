@@ -1,5 +1,6 @@
 package cosweb
 
+// RequestDataType 请求数据类型
 type RequestDataType int
 type RequestDataTypeMap []RequestDataType
 
@@ -38,43 +39,24 @@ func (r *RequestDataTypeMap) Reset(keys ...RequestDataType) {
 	*r = keys
 }
 
+// getDataFromRequest 从请求中获取数据（保持兼容性）
 func getDataFromRequest(c *Context, key string, dataType RequestDataType) (any, bool) {
-	switch dataType {
-	case RequestDataTypeParam:
-		v, ok := c.params[key]
-		return v, ok
-	case RequestDataTypeQuery:
-		return getQueryValue(c, key)
-	case RequestDataTypeBody:
-		return getBodyValue(c, key)
-	case RequestDataTypeCookie:
-		if val, err := c.Request.Cookie(key); err == nil && val.Value != "" {
-			return val.Value, true
-		}
-	case RequestDataTypeHeader:
-		if v := c.Request.Header.Get(key); v != "" {
-			return v, true
-		}
-	case RequestDataTypeContext:
-		v, ok := c.context[key]
-		return v, ok
+	return c.getDataFromStore(key, dataType)
+}
+
+// getQueryValue 从查询参数中获取值（保持兼容性）
+func getQueryValue(c *Context, key string) (string, bool) {
+	v, ok := c.getDataFromStore(key, RequestDataTypeQuery)
+	if !ok {
+		return "", false
+	}
+	if s, ok := v.(string); ok {
+		return s, true
 	}
 	return "", false
 }
-func getBodyValue(c *Context, k string) (v any, ok bool) {
-	vs := c.Values()
-	if ok = vs.Has(k); ok {
-		v = vs.Get(k)
-	}
-	return
-}
 
-func getQueryValue(c *Context, k string) (v string, ok bool) {
-	if c.query == nil {
-		c.query = c.Request.URL.Query()
-	}
-	if ok = c.query.Has(k); ok {
-		v = c.query.Get(k)
-	}
-	return
+// getBodyValue 从请求体中获取值（保持兼容性）
+func getBodyValue(c *Context, key string) (any, bool) {
+	return c.getDataFromStore(key, RequestDataTypeBody)
 }

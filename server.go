@@ -24,6 +24,8 @@ type Server struct {
 	Server          *http.Server
 	Registry        *registry.Registry
 	RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
+	MaxBodySize     int64              //最大请求体大小，默认 10MB
+	MaxCacheSize    int64              //最大缓存大小，默认 1MB
 }
 
 var (
@@ -45,7 +47,9 @@ func New() (s *Server) {
 		Binder: binder.New(binder.MIMEJSON),
 		Server: new(http.Server),
 		//Router:   registry.NewRouter(),
-		Registry: registry.New(),
+		Registry:     registry.New(),
+		MaxBodySize:  10 << 20, // 10 MB
+		MaxCacheSize: 1 << 20,  // 1 MB
 	}
 	s.Server.Handler = s
 	s.RequestDataType = defaultRequestDataType
