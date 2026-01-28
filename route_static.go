@@ -48,6 +48,10 @@ func (this *Static) Index(f string) {
 	}
 }
 func (this *Static) Route() (r string) {
+	prefix := strings.TrimRight(this.prefix, "/")
+	if prefix == "" {
+		return "*"
+	}
 	return fmt.Sprintf("%s/*", this.prefix)
 }
 
