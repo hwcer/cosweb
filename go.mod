@@ -3,7 +3,7 @@ module github.com/hwcer/cosweb
 go 1.24.0
 
 require (
-	github.com/hwcer/cosgo v1.6.7
+	github.com/hwcer/cosgo v1.6.9-0.20260128070258-68b52cb6bec0
 	github.com/hwcer/logger v0.2.8
 )
 
