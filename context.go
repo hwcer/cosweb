@@ -72,14 +72,15 @@ func (c *Context) doHandle(node *registry.Node, params map[string]string) error 
 	}
 	c.stores[RequestDataTypeParam] = pathValues
 
-	if err := c.doMiddleware(handle.middleware); err != nil {
-		return err
-	}
-	reply, err := handle.handle(node, c)
-	if err != nil {
-		return err
-	}
-	return handle.write(c, reply)
+	middleware := append([]MiddlewareFunc{}, handle.middleware...)
+	middleware = append(middleware, func(context *Context, next Next) error {
+		reply, err := handle.handle(node, c)
+		if err != nil {
+			return err
+		}
+		return handle.write(c, reply)
+	})
+	return c.doMiddleware(middleware)
 }
 
 func (c *Context) doMiddleware(middleware []MiddlewareFunc) (err error) {

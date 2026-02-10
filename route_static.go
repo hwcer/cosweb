@@ -29,9 +29,10 @@ func init() {
 //}
 
 type Static struct {
-	root   string
-	index  string
-	prefix string
+	root       string
+	index      string
+	prefix     string
+	middleware []MiddlewareFunc
 }
 
 func NewStatic(prefix string, root string) *Static {
@@ -40,6 +41,11 @@ func NewStatic(prefix string, root string) *Static {
 	s.index = "index.html"
 	return s
 }
+
+func (this *Static) Use(middleware ...MiddlewareFunc) {
+	this.middleware = append(this.middleware, middleware...)
+}
+
 func (this *Static) Index(f string) {
 	if !strings.Contains(f, ".") {
 		logger.Alert("static index file error:%v", f)
@@ -56,21 +62,26 @@ func (this *Static) Route() (r string) {
 }
 
 func (this *Static) handle(c *Context) any {
-	name := c.GetString(registry.PathMatchVague, RequestDataTypeParam)
-	if name == "" {
-		name = this.index
-	}
-	var file string
-	if !strings.Contains(name, ".") {
-		file = filepath.Join(this.root, name, this.index)
-		if _, err := os.Stat(file); err != nil {
-			return c.Error(ErrNotFound)
+	middleware := append([]MiddlewareFunc{}, this.middleware...)
+	middleware = append(middleware, func(context *Context, next Next) error {
+		name := c.GetString(registry.PathMatchVague, RequestDataTypeParam)
+		if name == "" {
+			name = this.index
 		}
-	} else {
-		file = filepath.Join(this.root, name)
-	}
-	c.Response.hijacked = true
-	http.ServeFile(c.Response.ResponseWriter, c.Request, file)
+		var file string
+		if !strings.Contains(name, ".") {
+			file = filepath.Join(this.root, name, this.index)
+			if _, err := os.Stat(file); err != nil {
+				return c.Error(ErrNotFound)
+			}
+		} else {
+			file = filepath.Join(this.root, name)
+		}
+		c.Response.hijacked = true
+		http.ServeFile(c.Response.ResponseWriter, c.Request, file)
+		return nil
+	})
 
-	return nil
+	return c.doMiddleware(middleware)
+
 }
