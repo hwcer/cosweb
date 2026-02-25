@@ -106,6 +106,15 @@ func (srv *Server) Service(name ...string) *registry.Service {
 	return service
 }
 
+func (srv *Server) Handler(name ...string) *Handler {
+	var s string
+	if len(name) > 0 {
+		s = name[0]
+	}
+	service := srv.Registry.Service(s)
+	return service.GetHandler().(*Handler)
+}
+
 // Register AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
 func (srv *Server) Register(route string, handler func(*Context) any, method ...string) {
