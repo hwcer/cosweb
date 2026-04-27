@@ -2,23 +2,14 @@ package render
 
 import (
 	"fmt"
-	"github.com/hwcer/logger"
 	"html/template"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-//var funcs template.FuncMap
-//
-//func init() {
-//	funcs = make(template.FuncMap)
-//	funcs["unescaped"] = unescaped
-//}
-//func unescaped(x string) interface{} {
-//	return template.URL(x)
-//}
+	"github.com/hwcer/logger"
+)
 
 // Render provides functions for easily writing HTML templates & JSON out to a HTTP Response.
 type Render struct {
@@ -62,12 +53,6 @@ func New(opts *Options) *Render {
 	if opts.Funcs == nil {
 		opts.Funcs = make(template.FuncMap)
 	}
-	//for k, v := range funcs {
-	//	if _, ok := opts.Funcs[k]; !ok {
-	//		opts.Funcs[k] = v
-	//	}
-	//}
-
 	if opts.Charset == "" {
 		opts.Charset = "UTF-8"
 	}
@@ -76,13 +61,15 @@ func New(opts *Options) *Render {
 		Options:   opts,
 		templates: make(map[string]*template.Template),
 	}
-
-	r.compileTemplatesFromDir()
+	// 启动时编译一次,失败通过 logger.Alert 报告,不杀进程
+	if err := r.compileTemplatesFromDir(); err != nil {
+		logger.Alert("render compile templates: %v", err)
+	}
 	return r
 }
 
 // HTML executes the template and writes to the responsewriter
-func (r *Render) Render(buf io.Writer, name string, data interface{}) error {
+func (r *Render) Render(buf io.Writer, name string, data any) error {
 	// re-compile on every render call when Debug is true
 	if !strings.HasSuffix(name, r.Options.Ext) {
 		name += r.Options.Ext
@@ -93,60 +80,59 @@ func (r *Render) Render(buf io.Writer, name string, data interface{}) error {
 		return err
 	}
 	if r.Options.Debug {
-		r.compileTemplatesFromDir()
+		if e := r.compileTemplatesFromDir(); e != nil {
+			return e
+		}
 	}
 	tmpl := r.templates[tplName]
 	if tmpl == nil {
 		return fmt.Errorf("unrecognised template %s", tplName)
 	}
-	// execute template
-	err = tmpl.Execute(buf, data)
-	if err != nil {
-		return err
-	}
-	return nil
+	return tmpl.Execute(buf, data)
 }
 
-func (r *Render) compileTemplatesFromDir() {
+func (r *Render) compileTemplatesFromDir() error {
 	if r.Options.Templates == "" {
-		return
+		return nil
 	}
-	templates := make(map[string]*template.Template)
-	var err error
-	var bases []string
 	var includes []string
 	if r.Options.Includes != "" {
-		includes, err = r.Glob(r.Options.Includes)
+		inc, err := r.Glob(r.Options.Includes)
 		if err != nil {
-			logger.Fatal(err.Error())
+			return fmt.Errorf("glob includes: %w", err)
 		}
+		includes = inc
 	}
-	bases, err = r.Glob(r.Options.Templates)
+	bases, err := r.Glob(r.Options.Templates)
 	if err != nil {
-		logger.Fatal(err.Error())
+		return fmt.Errorf("glob templates: %w", err)
 	}
 
 	baseTmpl := template.New("").Funcs(r.Options.Funcs)
 	if len(r.Options.Delims) >= 2 {
 		baseTmpl.Delims(r.Options.Delims[0], r.Options.Delims[1])
 	}
-
-	// parse partials (glob)
 	if len(includes) > 0 {
-		baseTmpl = template.Must(baseTmpl.ParseFiles(includes...))
+		if baseTmpl, err = baseTmpl.ParseFiles(includes...); err != nil {
+			return fmt.Errorf("parse includes: %w", err)
+		}
 	}
 
+	templates := make(map[string]*template.Template, len(bases))
 	for _, templateFile := range bases {
-		//tplName := filepath.Base(templateFile)
 		fileName, _ := r.tplName(templateFile)
-		// set template name
-		tmpl := template.Must(baseTmpl.Clone())
+		tmpl, err := baseTmpl.Clone()
+		if err != nil {
+			return fmt.Errorf("clone base: %w", err)
+		}
 		tmpl = tmpl.New(filepath.Base(templateFile))
-		// parse child template
-		tmpl = template.Must(tmpl.ParseFiles(templateFile))
+		if tmpl, err = tmpl.ParseFiles(templateFile); err != nil {
+			return fmt.Errorf("parse %s: %w", templateFile, err)
+		}
 		templates[fileName] = tmpl
 	}
 	r.templates = templates
+	return nil
 }
 
 func (r *Render) tplName(file string) (string, error) {

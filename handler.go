@@ -2,7 +2,6 @@ package cosweb
 
 import (
 	"reflect"
-	"runtime/debug"
 
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/logger"
@@ -16,10 +15,10 @@ type handleCaller interface {
 }
 
 type Next func() error
-type HandlerCaller func(node *registry.Node, c *Context) (interface{}, error)
+type HandlerCaller func(node *registry.Node, c *Context) (any, error)
 type HandlerFilter func(node *registry.Node) bool
 type MiddlewareFunc func(*Context, Next) error
-type HandlerSerialize func(c *Context, reply interface{}) ([]byte, error)
+type HandlerSerialize func(c *Context, reply any) ([]byte, error)
 
 type Handler struct {
 	//method     []string
@@ -30,21 +29,19 @@ type Handler struct {
 }
 
 // Use middleware
-func (h *Handler) Use(middleware ...func(*Context, Next) error) {
-	for _, m := range middleware {
-		h.middleware = append(h.middleware, m)
-	}
+func (h *Handler) Use(middleware ...MiddlewareFunc) {
+	h.middleware = append(h.middleware, middleware...)
 }
 
-func (h *Handler) SetCaller(caller func(node *registry.Node, c *Context) (interface{}, error)) {
+func (h *Handler) SetCaller(caller HandlerCaller) {
 	h.caller = caller
 }
 
-func (h *Handler) SetFilter(filter func(node *registry.Node) bool) {
+func (h *Handler) SetFilter(filter HandlerFilter) {
 	h.filter = filter
 }
 
-func (h *Handler) SetSerialize(serialize func(c *Context, reply interface{}) ([]byte, error)) {
+func (h *Handler) SetSerialize(serialize HandlerSerialize) {
 	h.serialize = serialize
 }
 
@@ -76,7 +73,7 @@ func (h *Handler) handle(node *registry.Node, c *Context) (reply any, err error)
 	defer func() {
 		if e := recover(); e != nil {
 			err = ErrInternalServerError
-			logger.Trace("%v\n%v", e, string(debug.Stack()))
+			logger.Trace("handler panic: %v", e)
 		}
 	}()
 	if h.caller != nil {
@@ -90,6 +87,11 @@ func (h *Handler) handle(node *registry.Node, c *Context) (reply any, err error)
 	} else {
 		ret := node.Call(c)
 		reply = ret[0].Interface()
+	}
+	// handler 返回的是 error(含 *values.Message / *HTTPError 等),
+	// 转成 err 让框架统一走 HTTPErrorHandler,便于保留错误码
+	if e, ok := reply.(error); ok {
+		return nil, e
 	}
 	return
 }

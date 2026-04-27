@@ -4,31 +4,23 @@ import (
 	"testing"
 )
 
-func TestName(t *testing.T) {
+// TestHandlerTypeAssertions 验证注册 handler 时底层签名断言成立。
+// useHandle 断言具名类型 HandlerFunc —— Go 类型系统里,一个未命名的
+// func(*Context) any 字面量不自动匹配 HandlerFunc,所以预期失败。
+func TestHandlerTypeAssertions(t *testing.T) {
 	if !useFunc(login) {
-		t.Log("login useFunc 失败")
-	} else {
-		t.Log("login useFunc 成功")
+		t.Errorf("login 应该满足 func(*Context) any 底层签名")
 	}
-
-	if !useHandle(login) {
-		t.Log("login useHandle 失败")
-	} else {
-		t.Log("login useHandle 成功")
+	if useHandle(login) {
+		t.Errorf("login 不应匹配具名类型 HandlerFunc")
 	}
 
 	th := h{}
-
 	if !useFunc(th.login) {
-		t.Log("h.login useFunc 失败")
-	} else {
-		t.Log("h.login useFunc 成功")
+		t.Errorf("h.login 应该满足 func(*Context) any 底层签名")
 	}
-
-	if !useHandle(th.login) {
-		t.Log("h.login useHandle 失败")
-	} else {
-		t.Log("h.login useHandle 成功")
+	if useHandle(th.login) {
+		t.Errorf("h.login 不应匹配具名类型 HandlerFunc")
 	}
 }
 

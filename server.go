@@ -1,10 +1,12 @@
 package cosweb
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +14,6 @@ import (
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/scc"
 	"github.com/hwcer/logger"
-	"golang.org/x/net/context"
 )
 
 // Server is the top-level framework instance.
@@ -40,26 +41,36 @@ var (
 	}
 )
 
+// 默认超时,防 Slowloris 等慢速攻击。用户可通过 s.Server.Xxx 覆盖。
+const (
+	defaultReadHeaderTimeout = 20 * time.Second
+	defaultIdleTimeout       = 60 * time.Second
+)
+
 // New creates an instance of Server.
 func New() (s *Server) {
 	s = &Server{
-		pool:   sync.Pool{},
 		Binder: binder.New(binder.MIMEJSON),
-		Server: new(http.Server),
-		//Router:   registry.NewRouter(),
+		Server: &http.Server{
+			ReadHeaderTimeout: defaultReadHeaderTimeout,
+			IdleTimeout:       defaultIdleTimeout,
+		},
 		Registry:     registry.New(),
 		MaxBodySize:  10 << 20, // 10 MB
 		MaxCacheSize: 1 << 20,  // 1 MB
 	}
 	s.Server.Handler = s
 	s.RequestDataType = defaultRequestDataType
-	s.pool.New = func() interface{} {
+	s.pool.New = func() any {
 		return NewContext(s)
 	}
 	return
 }
 
 func (srv *Server) Use(i MiddlewareFunc) {
+	if i == nil {
+		return
+	}
 	srv.middleware = append(srv.middleware, i)
 }
 
@@ -75,22 +86,36 @@ func (srv *Server) POST(path string, h func(*Context) any) {
 	srv.Register(path, h, http.MethodPost)
 }
 
-// 代理服务器
+// Proxy 注册反向代理（全局中间件方式）
+// 匹配前缀的请求转发到上游，不匹配自动回退到 API 路由
 func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
 	proxy := NewProxy(address)
-	proxy.Route(srv, prefix, method...)
+	if prefix != "/" {
+		prefix = strings.TrimRight(prefix, "/")
+	}
+	proxy.prefix = prefix
+	if len(method) > 0 {
+		proxy.methods = make(map[string]bool, len(method))
+		for _, m := range method {
+			proxy.methods[m] = true
+		}
+	}
+	srv.Use(proxy.Middleware)
 	return proxy
 }
 
-// Static registers a new Register with path prefix to serve static files from the
-// provided root directory.
-// 如果root 不是绝对路径 将以程序的WorkDir为根目录
+// Static 注册静态文件服务（全局中间件方式）
+// 文件存在直接响应，不存在自动回退到 API 路由匹配
+// 如果 root 不是绝对路径，以程序的 WorkDir 为根目录
 func (srv *Server) Static(prefix, root string, method ...string) *Static {
 	static := NewStatic(prefix, root)
-	if len(method) == 0 {
-		method = []string{http.MethodGet}
+	if len(method) > 0 {
+		static.methods = make(map[string]bool, len(method))
+		for _, m := range method {
+			static.methods[m] = true
+		}
 	}
-	srv.Register(static.Route(), static.handle, method...)
+	srv.Use(static.Middleware)
 	return static
 }
 
@@ -161,17 +186,10 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HTTPErrorHandler(c, "server stopped")
 		return
 	}
-	//srv
-	if err := c.doMiddleware(srv.middleware); err != nil {
-		HTTPErrorHandler(c, err)
-		return
-	}
-	node, params := srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
-	if node == nil {
-		HTTPErrorHandler(c, ErrNotFound)
-		return
-	}
-	if err := c.doHandle(node, params); err != nil {
+	// node/params 存入 Context，避免闭包捕获产生堆分配
+	c.node, c.params = srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
+	// 全局中间件 + handler 作为一条链执行（handler 在链尾自动触发，无额外 slice/closure 分配）
+	if err := c.doMiddlewareWithHandler(srv.middleware); err != nil {
 		HTTPErrorHandler(c, err)
 	}
 }

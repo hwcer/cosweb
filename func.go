@@ -2,57 +2,30 @@ package cosweb
 
 import (
 	"crypto/tls"
+	"os"
+
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
-	"os"
-	"unicode"
-	"unicode/utf8"
 )
 
-func isExported(name string) bool {
-	v, _ := utf8.DecodeRuneInString(name)
-	return unicode.IsUpper(v)
-}
-
-func strFirstToLower(str string) string {
-	if len(str) < 1 {
-		return ""
+// TLSConfigAutocert 使用 Let's Encrypt 自动申请证书。
+// cacheDir 为证书本地缓存目录(为空则不缓存,不建议生产环境使用);
+// hosts 为允许签发的域名白名单(为空则不限制,生产环境不建议)。
+func TLSConfigAutocert(cacheDir string, hosts ...string) (c *tls.Config, err error) {
+	m := &autocert.Manager{Prompt: autocert.AcceptTOS}
+	if cacheDir != "" {
+		m.Cache = autocert.DirCache(cacheDir)
 	}
-	strArray := []rune(str)
-	strArray[0] = unicode.ToLower(strArray[0])
-	return string(strArray)
-}
-
-func TLSConfigTransform(key, pem string) (c *tls.Config, err error) {
-	var bkey []byte
-	if bkey, err = filepathOrContent(key); err != nil {
-		return
+	if len(hosts) > 0 {
+		m.HostPolicy = autocert.HostWhitelist(hosts...)
 	}
-
-	var bcert []byte
-	if bcert, err = filepathOrContent(pem); err != nil {
-		return
-	}
-
 	c = new(tls.Config)
-	c.Certificates = make([]tls.Certificate, 1)
-	if c.Certificates[0], err = tls.X509KeyPair(bcert, bkey); err != nil {
-		return
-	}
-
-	return
-}
-
-// createTLS starts an HTTPS server using certificates automatically installed from https://letsencrypt.org.
-func TLSConfigAutocert() (c *tls.Config, err error) {
-	autoTLSManager := autocert.Manager{Prompt: autocert.AcceptTOS}
-	c = new(tls.Config)
-	c.GetCertificate = autoTLSManager.GetCertificate
+	c.GetCertificate = m.GetCertificate
 	c.NextProtos = append(c.NextProtos, acme.ALPNProto)
 	return
 }
 
-func filepathOrContent(fileOrContent interface{}) (content []byte, err error) {
+func filepathOrContent(fileOrContent any) (content []byte, err error) {
 	switch v := fileOrContent.(type) {
 	case string:
 		return os.ReadFile(v)
@@ -63,21 +36,19 @@ func filepathOrContent(fileOrContent interface{}) (content []byte, err error) {
 	}
 }
 
-// 通过文件或者证书内容获取TLSConfig
-func TLSConfigParse(certFile, keyFile interface{}) (TLSConfig *tls.Config, err error) {
+// TLSConfigParse 通过文件路径或原始字节构造 tls.Config。
+func TLSConfigParse(certFile, keyFile any) (cfg *tls.Config, err error) {
 	var cert []byte
 	if cert, err = filepathOrContent(certFile); err != nil {
 		return
 	}
-
 	var key []byte
 	if key, err = filepathOrContent(keyFile); err != nil {
 		return
 	}
-
-	TLSConfig = new(tls.Config)
-	TLSConfig.Certificates = make([]tls.Certificate, 1)
-	if TLSConfig.Certificates[0], err = tls.X509KeyPair(cert, key); err != nil {
+	cfg = new(tls.Config)
+	cfg.Certificates = make([]tls.Certificate, 1)
+	if cfg.Certificates[0], err = tls.X509KeyPair(cert, key); err != nil {
 		return
 	}
 	return

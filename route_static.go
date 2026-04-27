@@ -1,7 +1,6 @@
 package cosweb
 
 import (
-	"fmt"
 	"mime"
 	"net/http"
 	"os"
@@ -9,41 +8,33 @@ import (
 	"strings"
 
 	"github.com/hwcer/cosgo"
-	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/logger"
 )
-
-//const StaticRoutePath = "_StaticRoutePath"
 
 func init() {
 	_ = mime.AddExtensionType(".mjs", "text/javascript")
 }
 
-//func (c *Context) FileServer() bool {
-//	//s := c.GetString(StaticRoutePath, RequestDataTypeParam)
-//	//if s == "" {
-//	//	return false
-//	//}
-//	p := path.Clean(c.Request.URL.Path)
-//	return strings.HasSuffix(p, s)
-//}
-
+// Static 静态文件服务
+// 注册为全局中间件（非路由），文件存在直接响应，不存在调 next() 回退到 API 路由匹配
 type Static struct {
-	root       string
-	index      string
-	prefix     string
-	middleware []MiddlewareFunc
+	root    string
+	index   string
+	prefix  string
+	nocache bool
+	methods map[string]bool
 }
 
 func NewStatic(prefix string, root string) *Static {
-	prefix = registry.Route(prefix)
-	s := &Static{prefix: prefix, root: cosgo.Abs(root)}
-	s.index = "index.html"
-	return s
-}
-
-func (this *Static) Use(middleware ...MiddlewareFunc) {
-	this.middleware = append(this.middleware, middleware...)
+	if prefix != "/" {
+		prefix = strings.TrimRight(prefix, "/")
+	}
+	return &Static{
+		root:    cosgo.Abs(root),
+		index:   "index.html",
+		prefix:  prefix,
+		methods: map[string]bool{http.MethodGet: true, http.MethodHead: true},
+	}
 }
 
 func (this *Static) Index(f string) {
@@ -53,35 +44,66 @@ func (this *Static) Index(f string) {
 		this.index = f
 	}
 }
-func (this *Static) Route() (r string) {
-	prefix := strings.TrimRight(this.prefix, "/")
-	if prefix == "" {
-		return "*"
-	}
-	return fmt.Sprintf("%s/*", this.prefix)
+
+func (this *Static) Nocache(v bool) {
+	this.nocache = v
 }
 
-func (this *Static) handle(c *Context) any {
-	middleware := append([]MiddlewareFunc{}, this.middleware...)
-	middleware = append(middleware, func(context *Context, next Next) error {
-		name := c.GetString(registry.PathMatchVague, RequestDataTypeParam)
-		if name == "" {
-			name = this.index
-		}
-		var file string
-		if !strings.Contains(name, ".") {
-			file = filepath.Join(this.root, name, this.index)
-			if _, err := os.Stat(file); err != nil {
-				return c.Error(ErrNotFound)
-			}
-		} else {
-			file = filepath.Join(this.root, name)
-		}
-		c.Response.hijacked = true
-		http.ServeFile(c.Response.ResponseWriter, c.Request, file)
-		return nil
-	})
+// Middleware 返回全局中间件函数
+// 文件存在 → 响应并终止链（不调 next）
+// 文件不存在或路径不匹配 → 调 next() 继续 API 路由
 
-	return c.doMiddleware(middleware)
+func (this *Static) Middleware(c *Context, next Next) error {
+	if !this.methods[c.Request.Method] {
+		return next()
+	}
+	path := c.Request.URL.Path
+	if this.prefix != "/" && !strings.HasPrefix(path, this.prefix+"/") && path != this.prefix {
+		return next()
+	}
 
+	name := strings.TrimPrefix(path, this.prefix)
+	name = strings.TrimPrefix(name, "/")
+	if name == "" {
+		name = this.index
+	}
+
+	safe := filepath.Clean("/" + name)
+	var file string
+	if !strings.Contains(safe, ".") {
+		file = filepath.Join(this.root, safe, this.index)
+	} else {
+		file = filepath.Join(this.root, safe)
+	}
+
+	if !withinRoot(this.root, file) || !fileExists(file) {
+		return next()
+	}
+
+	return this.serveFile(c, file)
+}
+
+func (this *Static) serveFile(c *Context, file string) error {
+	if this.nocache {
+		h := c.Response.Header()
+		h.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		h.Set("Pragma", "no-cache")
+		h.Set("Expires", "0")
+	}
+	http.ServeFile(c.Response, c.Request, file)
+	return nil
+}
+
+func fileExists(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && !fi.IsDir()
+}
+
+// withinRoot 检查 file 是否位于 root 目录内
+func withinRoot(root, file string) bool {
+	rel, err := filepath.Rel(root, file)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

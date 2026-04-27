@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/hwcer/cosgo/values"
 	"github.com/hwcer/logger"
 )
 
@@ -21,10 +22,15 @@ var HTTPErrorHandler = func(c *Context, format any, args ...any) {
 	if he.Code == 0 || he.Code == http.StatusOK {
 		he.Code = http.StatusInternalServerError
 	}
-	c.WriteHeader(he.Code)
+	// 业务错误码(如 values.Message 的 9999)不是合法 HTTP 状态,归一为 500
+	if he.Code < 100 || he.Code > 599 {
+		he.Code = http.StatusInternalServerError
+	}
 	if he.Message == "" {
 		he.Message = http.StatusText(he.Code)
 	}
+	c.Response.Header().Set(HeaderContentType, GetContentTypeCharset(ContentTypeTextPlain))
+	c.WriteHeader(he.Code)
 	if _, err := c.Response.Write([]byte(he.Message)); err != nil {
 		logger.Error(err)
 	}
@@ -76,6 +82,11 @@ func NewHTTPError(code int, format any, args ...any) *HTTPError {
 		return &r
 	case *HTTPError:
 		return r
+	case *values.Message:
+		// 保留业务错误码;若不是标准 HTTP 状态,由 HTTPErrorHandler 再归一
+		return &HTTPError{Code: int(r.Code), Message: r.String()}
+	case values.Message:
+		return &HTTPError{Code: int(r.Code), Message: r.String()}
 	}
 	he := &HTTPError{Code: code}
 	if format == nil {
@@ -85,11 +96,19 @@ func NewHTTPError(code int, format any, args ...any) *HTTPError {
 	case error:
 		he.Message = r.Error()
 	case string:
-		he.Message = fmt.Sprintf(r, args...)
+		if len(args) > 0 {
+			he.Message = fmt.Sprintf(r, args...)
+		} else {
+			he.Message = r
+		}
 	case []byte:
-		he.Message = fmt.Sprintf(string(r), args...)
+		if len(args) > 0 {
+			he.Message = fmt.Sprintf(string(r), args...)
+		} else {
+			he.Message = string(r)
+		}
 	default:
-		he.Message = fmt.Sprintf(fmt.Sprintf("%v", r), args...)
+		he.Message = fmt.Sprintf("%v", r)
 	}
 	return he
 }

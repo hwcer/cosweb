@@ -17,7 +17,7 @@ import (
 type Response struct {
 	http.ResponseWriter
 	status   int
-	canWrite bool
+	written  bool //已写入响应体
 	hijacked bool
 }
 
@@ -29,28 +29,37 @@ func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 
 	conn, buf, err := hijacker.Hijack()
 	if err == nil {
-		res.hijacked = true // 标记为已劫持
+		res.hijacked = true
 	}
 	return conn, buf, err
 }
+
+// CanWrite 表示仍可产生响应。当上层(handler.write/HTTPErrorHandler)据此判断
+// 是否需要再生成响应体。一旦开始写 body 或已劫持,返回 false,避免重复写。
 func (res *Response) CanWrite() bool {
-	return res.canWrite && !res.hijacked
+	return !res.written && !res.hijacked
 }
+
 func (res *Response) Write(b []byte) (n int, err error) {
-	if !res.CanWrite() {
+	if res.hijacked {
 		return 0, nil
 	}
 	if res.status == 0 {
 		res.WriteHeader(http.StatusOK)
 	}
-	res.canWrite = false
+	res.written = true
 	return res.ResponseWriter.Write(b)
 }
+
 func (res *Response) WriteHeader(code int) {
-	if res.CanWrite() {
-		res.status = code
-		res.ResponseWriter.WriteHeader(code)
+	if res.written || res.hijacked {
+		return
 	}
+	if res.status != 0 {
+		return
+	}
+	res.status = code
+	res.ResponseWriter.WriteHeader(code)
 }
 
 func (c *Context) Header() http.Header {
@@ -94,7 +103,7 @@ func (c *Context) Bytes(contentType ContentType, b []byte) (err error) {
 	_, err = c.Response.Write(b)
 	return
 }
-func (c *Context) Render(name string, data interface{}) (err error) {
+func (c *Context) Render(name string, data any) (err error) {
 	if c.Server.Render == nil {
 		return ErrRendererNotRegistered
 	}
@@ -149,7 +158,7 @@ func (c *Context) Redirect(url string) error {
 	return nil
 }
 
-func (c *Context) XML(i interface{}, indent string) (err error) {
+func (c *Context) XML(i any, indent string) (err error) {
 	data, err := xml.Marshal(i)
 	if err != nil {
 		return err
@@ -165,7 +174,7 @@ func (c *Context) String(s string) (err error) {
 	return c.Bytes(ContentTypeTextPlain, []byte(s))
 }
 
-func (c *Context) JSON(i interface{}) error {
+func (c *Context) JSON(i any) error {
 	data, err := json.Marshal(i)
 	if err != nil {
 		return err

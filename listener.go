@@ -3,17 +3,22 @@ package cosweb
 import (
 	"crypto/tls"
 	"net"
+	"sync"
 )
 
-var makeListeners = make(map[string]MakeListener)
+var (
+	makeListenersMu sync.RWMutex
+	makeListeners   = map[string]MakeListener{}
+)
 
 func init() {
-	makeListeners["tcp"] = tcpMakeListener("tcp")
+	tcp := tcpMakeListener("tcp")
+	makeListeners["tcp"] = tcp
 	makeListeners["tcp4"] = tcpMakeListener("tcp4")
 	makeListeners["tcp6"] = tcpMakeListener("tcp6")
-	makeListeners["http"] = tcpMakeListener("tcp")
-	makeListeners["ws"] = tcpMakeListener("tcp")
-	makeListeners["wss"] = tcpMakeListener("tcp")
+	makeListeners["http"] = tcp
+	makeListeners["ws"] = tcp
+	makeListeners["wss"] = tcp
 }
 
 // MakeListener defines a listener generator.
@@ -21,6 +26,8 @@ type MakeListener func(address string, tlsConfig *tls.Config) (ln net.Listener, 
 
 // RegisterListener registers a MakeListener for network.
 func RegisterListener(network string, ml MakeListener) {
+	makeListenersMu.Lock()
+	defer makeListenersMu.Unlock()
 	makeListeners[network] = ml
 }
 
@@ -36,5 +43,7 @@ func tcpMakeListener(network string) MakeListener {
 }
 
 func Listener(network string) MakeListener {
+	makeListenersMu.RLock()
+	defer makeListenersMu.RUnlock()
 	return makeListeners[network]
 }

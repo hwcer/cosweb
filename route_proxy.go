@@ -1,89 +1,40 @@
 package cosweb
 
 import (
-	"io"
+	"context"
 	"math/rand"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"github.com/hwcer/logger"
 )
 
-//反向代理服务器
-
-const iProxyRoutePath = "_ProxyRoutePath"
-
+// NewProxy 创建一个反向代理。参数为可选的上游地址列表。
 func NewProxy(address ...string) *Proxy {
-	proxy := &Proxy{}
+	p := &Proxy{GetTarget: defaultProxyGetTarget}
 	for _, addr := range address {
-		_ = proxy.AddTarget(addr)
+		_ = p.AddTarget(addr)
 	}
-	proxy.GetTarget = defaultProxyGetTarget
-	return proxy
+	p.reverse = &httputil.ReverseProxy{
+		Rewrite:      p.rewrite,
+		ErrorHandler: p.errorHandler,
+	}
+	return p
 }
 
 type Proxy struct {
-	target    []*url.URL
-	GetTarget func(*Context, []*url.URL) url.URL //获取目标服务器地址,适用于负载均衡
+	prefix      string
+	target      []*url.URL
+	reverse     *httputil.ReverseProxy
+	methods     map[string]bool
+	StripPrefix bool                                  // 转发时是否剥离前缀，默认 false（保留原始路径）
+	Transport   http.RoundTripper                     //自定义 RoundTripper,nil 时使用 http.DefaultTransport
+	GetTarget   func(*Context, []*url.URL) *url.URL   //负载均衡钩子
 }
 
-func (this *Proxy) Route(s *Server, prefix string, method ...string) {
-	arr := []string{strings.TrimSuffix(prefix, "/"), "*" + iProxyRoutePath}
-	r := strings.Join(arr, "/")
-	s.Register(r, this.handle, method...)
-}
-
-func (this *Proxy) handle(c *Context) any {
-	var target = this.GetTarget(c, this.target)
-	if &target == nil {
-		return c.Error("Proxy AddTarget empty")
-	}
-	path := c.GetString(iProxyRoutePath, RequestDataTypeParam)
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	target.Path = path
-	target.RawQuery = c.Request.URL.RawQuery
-	target.Fragment = c.Request.URL.Fragment
-	if c.Request.URL.User != nil {
-		target.User = c.Request.URL.User
-	}
-
-	address := target.String()
-	var req *http.Request
-	req, err := http.NewRequest(c.Request.Method, address, c.Request.Body)
-	if err != nil {
-		return c.Error(err)
-	}
-
-	copyHeader(c.Request.Header, &req.Header)
-
-	// Create a client and query the target
-	var resp *http.Response
-	var transport http.Transport
-	resp, err = transport.RoundTrip(req)
-	if err != nil {
-		return c.Error(err)
-	}
-
-	defer resp.Body.Close()
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	header := c.Response.Header()
-	copyHeader(resp.Header, &header)
-	header.Add("Requested-Host", req.Host)
-
-	c.WriteHeader(resp.StatusCode)
-	if _, err = c.Response.Write(body); err != nil {
-		return c.Error(err)
-	}
-	return nil
-}
-
-// 添加代理服务器地址
+// AddTarget 追加上游地址。
 func (this *Proxy) AddTarget(addr string) error {
 	u, err := url.Parse(addr)
 	if err != nil {
@@ -93,21 +44,84 @@ func (this *Proxy) AddTarget(addr string) error {
 	return nil
 }
 
-func defaultProxyGetTarget(c *Context, address []*url.URL) url.URL {
-	var u *url.URL
-	if len(address) == 1 {
-		u = address[0]
-	} else if len(address) > 1 {
-		i := rand.Intn(len(address) - 1)
-		u = address[i]
+// Middleware 全局中间件：匹配前缀的请求转发到上游，不匹配调 next()
+func (this *Proxy) Middleware(c *Context, next Next) error {
+	if len(this.methods) > 0 && !this.methods[c.Request.Method] {
+		return next()
 	}
-	return *u
+	path := c.Request.URL.Path
+	if this.prefix != "/" && !strings.HasPrefix(path, this.prefix+"/") && path != this.prefix {
+		return next()
+	}
+	target := this.GetTarget(c, this.target)
+	if target == nil {
+		return next()
+	}
+
+	// 计算转发路径
+	forwardPath := path
+	if this.StripPrefix {
+		forwardPath = strings.TrimPrefix(path, this.prefix)
+		if !strings.HasPrefix(forwardPath, "/") {
+			forwardPath = "/" + forwardPath
+		}
+	}
+
+	// 存转发路径到 request context，供 rewrite 使用
+	c.Request = c.Request.WithContext(withProxyPath(c.Request.Context(), forwardPath))
+
+	rp := this.reverse
+	if this.Transport != nil {
+		cp := *rp
+		cp.Transport = this.Transport
+		rp = &cp
+	}
+	rp.ServeHTTP(c.Response, c.Request)
+	c.Response.written = true
+	return nil
 }
 
-func copyHeader(source http.Header, dest *http.Header) {
-	for n, v := range source {
-		for _, vv := range v {
-			dest.Add(n, vv)
-		}
+type proxyPathKey struct{}
+
+func withProxyPath(parent context.Context, path string) context.Context {
+	return context.WithValue(parent, proxyPathKey{}, path)
+}
+
+func (this *Proxy) rewrite(pr *httputil.ProxyRequest) {
+	target := this.GetTarget(nil, this.target)
+	if target == nil {
+		return
+	}
+
+	forwardPath, _ := pr.In.Context().Value(proxyPathKey{}).(string)
+	if forwardPath == "" {
+		forwardPath = pr.In.URL.Path
+	}
+
+	dst := *target
+	dst.Path = forwardPath
+	dst.RawQuery = pr.In.URL.RawQuery
+	dst.Fragment = pr.In.URL.Fragment
+	if pr.In.URL.User != nil {
+		dst.User = pr.In.URL.User
+	}
+	pr.Out.URL = &dst
+	pr.Out.Host = dst.Host
+	pr.SetXForwarded()
+}
+
+func (this *Proxy) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	logger.Alert("proxy error: %v", err)
+	w.WriteHeader(http.StatusBadGateway)
+}
+
+func defaultProxyGetTarget(_ *Context, address []*url.URL) *url.URL {
+	switch len(address) {
+	case 0:
+		return nil
+	case 1:
+		return address[0]
+	default:
+		return address[rand.Intn(len(address))]
 	}
 }
