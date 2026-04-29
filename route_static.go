@@ -89,6 +89,8 @@ func (this *Static) serveFile(c *Context, file string) error {
 		h.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		h.Set("Pragma", "no-cache")
 		h.Set("Expires", "0")
+		c.Request.Header.Del("If-Modified-Since")
+		c.Request.Header.Del("If-None-Match")
 	}
 	http.ServeFile(c.Response, c.Request, file)
 	return nil
