@@ -24,6 +24,7 @@ type Context struct {
 	stores   map[RequestDataType]values.Values // 统一存储所有参数
 	node     *registry.Node                    // 当前匹配的路由节点（避免闭包分配）
 	params   registry.Params                   // 当前路径参数
+	response Response                          // 内嵌值，避免每次请求堆分配
 	Server   *Server
 	Session  *session.Session
 	Request  *http.Request
@@ -42,7 +43,11 @@ func NewContext(s *Server) *Context {
 
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Request = r
-	c.Response = &Response{ResponseWriter: w}
+	c.response.ResponseWriter = w
+	c.response.status = 0
+	c.response.written = false
+	c.response.hijacked = false
+	c.Response = &c.response
 	c.node = nil
 	c.params = nil
 	clear(c.stores)
@@ -54,6 +59,7 @@ func (c *Context) release() {
 	c.accept = nil
 	clear(c.stores)
 	c.Request = nil
+	c.response.ResponseWriter = nil
 	c.Response = nil
 	c.Session.Release()
 }
@@ -71,15 +77,23 @@ func (c *Context) doHandle(node *registry.Node) error {
 		}
 		return handle.write(c, reply)
 	}
-	middleware := append([]MiddlewareFunc{}, handle.middleware...)
-	middleware = append(middleware, func(context *Context, next Next) error {
+	// 直接复用 handle.middleware 切片，handler 在链尾自动触发，消除 slice copy + 额外闭包
+	total := len(handle.middleware)
+	var i int
+	var next Next
+	next = func() error {
+		if i < total {
+			mf := handle.middleware[i]
+			i++
+			return mf(c, next)
+		}
 		reply, err := handle.handle(node, c)
 		if err != nil {
 			return err
 		}
 		return handle.write(c, reply)
-	})
-	return c.doMiddleware(middleware)
+	}
+	return next()
 }
 
 // doMiddlewareWithHandler 执行全局中间件链，链尾自动调用 handler。
@@ -102,31 +116,10 @@ func (c *Context) doMiddlewareWithHandler(middleware []MiddlewareFunc) error {
 	return next()
 }
 
-// doMiddleware 按经典嵌套 Next 语义执行中间件链:
-//   - 中间件调用 next() 返回后才是链尾完成,适合做计时/日志/recover;
-//   - 中间件返回的 error 短路整条链;
-//   - 中间件不调 next() 则截断后续,返回其 error(可为 nil)。
-func (c *Context) doMiddleware(middleware []MiddlewareFunc) error {
-	if len(middleware) == 0 {
-		return nil
-	}
-	var i int
-	var next Next
-	next = func() error {
-		if i >= len(middleware) {
-			return nil
-		}
-		mf := middleware[i]
-		i++
-		return mf(c, next)
-	}
-	return next()
-}
 
 // IsWebSocket 判断是否WebSocket
 func (c *Context) IsWebSocket() bool {
-	upgrade := c.Request.Header.Get(HeaderUpgrade)
-	return strings.ToLower(upgrade) == "websocket"
+	return strings.EqualFold(c.Request.Header.Get(HeaderUpgrade), "websocket")
 }
 
 // Protocol 协议
@@ -153,9 +146,11 @@ func (c *Context) Protocol() string {
 
 // RemoteAddr 客户端地址
 func (c *Context) RemoteAddr() string {
-	// Fall back to legacy behavior
 	if ip := c.Request.Header.Get(HeaderXForwardedFor); ip != "" {
-		return strings.Split(ip, ", ")[0]
+		if i := strings.IndexByte(ip, ','); i >= 0 {
+			return ip[:i]
+		}
+		return ip
 	}
 	if ip := c.Request.Header.Get(HeaderXRealIP); ip != "" {
 		return ip
@@ -272,13 +267,19 @@ func (c *Context) GetString(key string, dataTypes ...RequestDataType) string {
 // Bind 绑定JSON XML
 func (c *Context) Bind(i any) (err error) {
 	t := c.Request.Header.Get(HeaderContentType)
-	// 忽略 "; charset=utf-8" 等参数部分
-	if idx := strings.Index(t, ";"); idx >= 0 {
+	if idx := strings.IndexByte(t, ';'); idx >= 0 {
 		t = strings.TrimSpace(t[:idx])
 	}
 	encoder := binder.Get(t)
 	if encoder == nil {
 		return values.Errorf(0, "unknown content type: %s", t)
+	}
+	// 已缓存时直接使用，跳过 Buffer() 的 bytes.Buffer 结构体分配
+	if c.body != nil {
+		if len(c.body) > 0 {
+			return encoder.Unmarshal(c.body, i)
+		}
+		return nil
 	}
 	var b *bytes.Buffer
 	if b, err = c.Buffer(); err != nil {
@@ -295,7 +296,11 @@ func (c *Context) Buffer() (b *bytes.Buffer, err error) {
 	if c.body != nil {
 		return bytes.NewBuffer(c.body), nil
 	}
-	b = bytes.NewBuffer([]byte{})
+	initCap := 256
+	if cl := c.Request.ContentLength; cl > 0 && cl <= c.Server.MaxBodySize {
+		initCap = int(cl)
+	}
+	b = bytes.NewBuffer(make([]byte, 0, initCap))
 	defer func() {
 		// 只有在没有错误的情况下才恢复 c.Request.Body 和缓存数据
 		if err == nil {
@@ -334,28 +339,34 @@ func (c *Context) Errorf(code int32, format any, args ...any) error {
 	return values.Errorf(code, format, args...)
 }
 
-func (this *Context) Accept() binder.Binder {
-	if this.accept != nil {
-		return this.accept
+func (c *Context) Accept() binder.Binder {
+	if c.accept != nil {
+		return c.accept
 	}
-	var arr []string
-	if header := this.Request.Header.Get(HeaderAccept); header != "" {
-		arr = append(arr, strings.Split(header, ",")...)
-	}
-	if header := this.Request.Header.Get(HeaderContentType); header != "" {
-		arr = append(arr, strings.Split(header, ",")...)
-	}
-
-	for _, s := range arr {
-		// 去掉 "; charset=utf-8" 等参数和空白
-		if idx := strings.Index(s, ";"); idx >= 0 {
-			s = s[:idx]
+	// 栈数组 + 手动切割，避免 strings.Split 的 []string 堆分配
+	for _, header := range [2]string{
+		c.Request.Header.Get(HeaderAccept),
+		c.Request.Header.Get(HeaderContentType),
+	} {
+		for header != "" {
+			var s string
+			if i := strings.IndexByte(header, ','); i >= 0 {
+				s, header = header[:i], header[i+1:]
+			} else {
+				s, header = header, ""
+			}
+			if i := strings.IndexByte(s, ';'); i >= 0 {
+				s = s[:i]
+			}
+			s = strings.TrimSpace(s)
+			if c.Server.AcceptIgnore[s] {
+				continue
+			}
+			if c.accept = binder.Get(s); c.accept != nil {
+				return c.accept
+			}
 		}
-		s = strings.TrimSpace(s)
-		if this.accept = binder.Get(s); this.accept != nil {
-			return this.accept
-		}
 	}
-	this.accept = this.Server.Binder
-	return this.accept
+	c.accept = c.Server.Binder
+	return c.accept
 }

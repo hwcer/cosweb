@@ -24,6 +24,7 @@ type Server struct {
 	Render          Render
 	Server          *http.Server
 	Registry        *registry.Registry
+	AcceptIgnore    map[string]bool    //响应协商时忽略的 MIME 类型（如 */*、form-urlencoded）
 	RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
 	MaxBodySize     int64              //最大请求体大小，默认 10MB
 	MaxCacheSize    int64              //最大缓存大小，默认 1MB
@@ -56,6 +57,7 @@ func New() (s *Server) {
 			IdleTimeout:       defaultIdleTimeout,
 		},
 		Registry:     registry.New(),
+		AcceptIgnore: map[string]bool{"*/*": true, binder.MIMEPOSTForm: true},
 		MaxBodySize:  10 << 20, // 10 MB
 		MaxCacheSize: 1 << 20,  // 1 MB
 	}
@@ -173,13 +175,13 @@ func (srv *Server) Release(c *Context) {
 // ServeHTTP implements `http.Handler` interface, which serves HTTP requests.
 func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	scc.Add(1)
-	defer scc.Done()
 	c := srv.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
 			HTTPErrorHandler(c, e)
 		}
 		srv.Release(c)
+		scc.Done()
 	}()
 
 	if scc.Stopped() {
