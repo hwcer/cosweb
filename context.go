@@ -17,18 +17,33 @@ const (
 	indexPage = "index.html"
 )
 
+type dispatch struct {
+	index   int
+	funcs   []MiddlewareFunc
+	handler *Handler
+	nexts   []registry.SearchResult
+}
+
+func (mid *dispatch) Release() {
+	mid.funcs = nil
+	mid.handler = nil
+	mid.nexts = nil
+}
+
 // Context API上下文.
 type Context struct {
-	body     []byte
-	accept   binder.Binder                     //客户端接受的序列化方式
-	stores   map[RequestDataType]values.Values // 统一存储所有参数
-	node     *registry.Node                    // 当前匹配的路由节点（避免闭包分配）
-	params   registry.Params                   // 当前路径参数
-	response Response                          // 内嵌值，避免每次请求堆分配
-	Server   *Server
-	Session  *session.Session
-	Request  *http.Request
-	Response *Response
+	body       []byte
+	accept     binder.Binder                     //客户端接受的序列化方式
+	stores     map[RequestDataType]values.Values // 统一存储所有参数
+	node       *registry.Node                    // 当前匹配的路由节点（避免闭包分配）
+	params     registry.Params                   // 当前路径参数
+	dp         dispatch
+	dispatchFn Next     // 缓存 c.doDispatch 方法值，避免每次传递时分配
+	response   Response // 内嵌值，避免每次请求堆分配
+	Server     *Server
+	Session    *session.Session
+	Request    *http.Request
+	Response   *Response
 }
 
 // NewContext returns a Context instance.
@@ -38,6 +53,7 @@ func NewContext(s *Server) *Context {
 		stores: make(map[RequestDataType]values.Values),
 	}
 	c.Session = session.New()
+	c.dispatchFn = c.doDispatch
 	return c
 }
 
@@ -50,6 +66,7 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = &c.response
 	c.node = nil
 	c.params = nil
+	c.dp = dispatch{}
 	clear(c.stores)
 }
 
@@ -61,61 +78,53 @@ func (c *Context) release() {
 	c.Request = nil
 	c.response.ResponseWriter = nil
 	c.Response = nil
+	c.dp.Release()
 	c.Session.Release()
 }
 
-func (c *Context) doHandle(node *registry.Node) error {
-	handle, ok := node.Handler().(*Handler)
+func (c *Context) Next() error {
+	if c.dp.nexts == nil {
+		all := c.Server.Registry.SearchAll(c.Request.Method, c.Request.URL.Path)
+		if len(all) > 1 {
+			c.dp.nexts = all[1:]
+		}
+	}
+	if len(c.dp.nexts) == 0 {
+		return ErrNotFound
+	}
+	r := c.dp.nexts[0]
+	c.dp.nexts = c.dp.nexts[1:]
+	c.node = r.Node
+	c.params = r.Params
+	handle, ok := r.Node.Handler().(*Handler)
 	if !ok {
 		return ErrHandlerError
 	}
-	// 无路由级中间件时直连 handler，避免 slice + closure 分配
-	if len(handle.middleware) == 0 {
-		reply, err := handle.handle(node, c)
-		if err != nil {
-			return err
-		}
-		return handle.write(c, reply)
+	if handle != c.dp.handler && len(handle.middleware) > 0 {
+		funcs := make([]MiddlewareFunc, c.dp.index+len(handle.middleware))
+		copy(funcs, c.dp.funcs[:c.dp.index])
+		copy(funcs[c.dp.index:], handle.middleware)
+		c.dp.funcs = funcs
 	}
-	// 直接复用 handle.middleware 切片，handler 在链尾自动触发，消除 slice copy + 额外闭包
-	total := len(handle.middleware)
-	var i int
-	var next Next
-	next = func() error {
-		if i < total {
-			mf := handle.middleware[i]
-			i++
-			return mf(c, next)
-		}
-		reply, err := handle.handle(node, c)
-		if err != nil {
-			return err
-		}
-		return handle.write(c, reply)
-	}
-	return next()
+	c.dp.handler = handle
+	return c.doDispatch()
 }
 
-// doMiddlewareWithHandler 执行全局中间件链，链尾自动调用 handler。
-// node/params 已存在 Context 中，不需要闭包捕获，消除 make([]MiddlewareFunc) + 闭包分配。
-func (c *Context) doMiddlewareWithHandler(middleware []MiddlewareFunc) error {
-	total := len(middleware)
-	var i int
-	var next Next
-	next = func() error {
-		if i < total {
-			mf := middleware[i]
-			i++
-			return mf(c, next)
-		}
-		if c.node == nil {
-			return ErrNotFound
-		}
-		return c.doHandle(c.node)
+func (c *Context) doDispatch() error {
+	if c.dp.index < len(c.dp.funcs) {
+		mf := c.dp.funcs[c.dp.index]
+		c.dp.index++
+		return mf(c, c.dispatchFn)
 	}
-	return next()
+	if c.dp.handler == nil {
+		return ErrNotFound
+	}
+	reply, err := c.dp.handler.handle(c.node, c)
+	if err != nil {
+		return err
+	}
+	return c.dp.handler.write(c, reply)
 }
-
 
 // IsWebSocket 判断是否WebSocket
 func (c *Context) IsWebSocket() bool {

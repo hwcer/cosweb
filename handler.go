@@ -88,9 +88,7 @@ func (h *Handler) handle(node *registry.Node, c *Context) (reply any, err error)
 		ret := node.Call(c)
 		reply = ret[0].Interface()
 	}
-	// handler 返回的是 error(含 *values.Message / *HTTPError 等),
-	// 转成 err 让框架统一走 HTTPErrorHandler,便于保留错误码
-	if e, ok := reply.(error); ok {
+	if e, ok := reply.(*HTTPError); ok {
 		return nil, e
 	}
 	return

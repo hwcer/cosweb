@@ -6,12 +6,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 
 	"github.com/hwcer/logger"
 )
 
-// NewProxy 创建一个反向代理。参数为可选的上游地址列表。
 func NewProxy(address ...string) *Proxy {
 	p := &Proxy{GetTarget: defaultProxyGetTarget}
 	for _, addr := range address {
@@ -25,16 +23,13 @@ func NewProxy(address ...string) *Proxy {
 }
 
 type Proxy struct {
-	prefix      string
 	target      []*url.URL
 	reverse     *httputil.ReverseProxy
-	methods     map[string]bool
-	StripPrefix bool                                  // 转发时是否剥离前缀，默认 false（保留原始路径）
-	Transport   http.RoundTripper                     //自定义 RoundTripper,nil 时使用 http.DefaultTransport
-	GetTarget   func(*Context, []*url.URL) *url.URL   //负载均衡钩子
+	StripPrefix bool
+	Transport   http.RoundTripper
+	GetTarget   func(*Context, []*url.URL) *url.URL
 }
 
-// AddTarget 追加上游地址。
 func (this *Proxy) AddTarget(addr string) error {
 	u, err := url.Parse(addr)
 	if err != nil {
@@ -44,32 +39,16 @@ func (this *Proxy) AddTarget(addr string) error {
 	return nil
 }
 
-// Middleware 全局中间件：匹配前缀的请求转发到上游，不匹配调 next()
-func (this *Proxy) Middleware(c *Context, next Next) error {
-	if len(this.methods) > 0 && !this.methods[c.Request.Method] {
-		return next()
-	}
-	path := c.Request.URL.Path
-	if this.prefix != "/" && !strings.HasPrefix(path, this.prefix+"/") && path != this.prefix {
-		return next()
-	}
+func (this *Proxy) Handle(c *Context) any {
 	target := this.GetTarget(c, this.target)
 	if target == nil {
-		return next()
+		return ErrNotFound
 	}
-
-	// 计算转发路径
-	forwardPath := path
+	forwardPath := c.Request.URL.Path
 	if this.StripPrefix {
-		forwardPath = strings.TrimPrefix(path, this.prefix)
-		if !strings.HasPrefix(forwardPath, "/") {
-			forwardPath = "/" + forwardPath
-		}
+		forwardPath = "/" + c.GetString("*", RequestDataTypeParam)
 	}
-
-	// 存转发路径到 request context，供 rewrite 使用
 	c.Request = c.Request.WithContext(withProxyPath(c.Request.Context(), forwardPath))
-
 	rp := this.reverse
 	if this.Transport != nil {
 		cp := *rp

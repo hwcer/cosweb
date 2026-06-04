@@ -99,13 +99,14 @@ func TestBodyLimitExceeded(t *testing.T) {
 	})
 
 	ts := newTestServer(t, s)
-	resp, err := http.Post(ts.URL+"/x", "application/octet-stream", strings.NewReader(strings.Repeat("a", 128)))
+	resp, err := http.Post(ts.URL+"/x", "application/json", strings.NewReader(strings.Repeat("a", 128)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 413 {
-		t.Errorf("expected 413, got %d", resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "request body too large") {
+		t.Errorf("expected body to contain 'request body too large', got %q", body)
 	}
 }
 
@@ -173,6 +174,56 @@ func TestStaticTraversal(t *testing.T) {
 	}
 }
 
+// TestStaticRouting 验证静态路由的四种匹配场景。
+func TestStaticRouting(t *testing.T) {
+	root := t.TempDir()
+	// root/index.html
+	os.WriteFile(filepath.Join(root, "index.html"), []byte("root-index"), 0o644)
+	// root/style.css
+	os.WriteFile(filepath.Join(root, "style.css"), []byte("body{}"), 0o644)
+	// root/s/index.html
+	os.MkdirAll(filepath.Join(root, "s"), 0o755)
+	os.WriteFile(filepath.Join(root, "s", "index.html"), []byte("sub-index"), 0o644)
+	// root/s/app.js
+	os.WriteFile(filepath.Join(root, "s", "app.js"), []byte("console.log()"), 0o644)
+
+	subDir := filepath.Join(root, "s")
+
+	tests := []struct {
+		prefix string
+		root   string
+		path   string
+		want   string
+	}{
+		// "/" 前缀：根目录静态服务
+		{"/", root, "/", "root-index"},             // / → index.html
+		{"/", root, "/style.css", "body{}"},        // /* → 所有文件
+		{"/", root, "/s/app.js", "console.log()"},  // /* → 子目录文件
+
+		// "/s" 前缀：挂载 root/s 子目录
+		{"/s", subDir, "/s/", "sub-index"},            // /s/ → index.html
+		{"/s", subDir, "/s/app.js", "console.log()"},  // /s/* → 子目录下所有文件
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.prefix+"|"+tt.path, func(t *testing.T) {
+			s := New()
+			s.Static(tt.prefix, tt.root)
+			ts := newTestServer(t, s)
+			resp, err := http.Get(ts.URL + tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			got := strings.TrimSpace(string(body))
+			if got != tt.want {
+				t.Errorf("Static(%q) GET %s: got %q, want %q (status %d)", tt.prefix, tt.path, got, tt.want, resp.StatusCode)
+			}
+		})
+	}
+}
+
 // TestSetGetThroughDefault 验证 c.Set + c.Get 在默认 dataTypes 下互通。
 func TestSetGetThroughDefault(t *testing.T) {
 	s := New()
@@ -215,5 +266,19 @@ func TestResponseMultiWrite(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "part1-part2" {
 		t.Errorf("expected 'part1-part2', got %q", body)
+	}
+}
+
+func BenchmarkMiddlewareChain(b *testing.B) {
+	s := New()
+	s.Use(func(c *Context, next Next) error { return next() })
+	s.Use(func(c *Context, next Next) error { return next() })
+	s.GET("/bench", func(c *Context) any { return "ok" })
+	r := httptest.NewRequest("GET", "/bench", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
 	}
 }

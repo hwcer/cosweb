@@ -88,36 +88,21 @@ func (srv *Server) POST(path string, h func(*Context) any) {
 	srv.Register(path, h, http.MethodPost)
 }
 
-// Proxy 注册反向代理（全局中间件方式）
-// 匹配前缀的请求转发到上游，不匹配自动回退到 API 路由
+// Proxy 注册反向代理，通配路由匹配 prefix 下所有路径
 func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
 	proxy := NewProxy(address)
-	if prefix != "/" {
-		prefix = strings.TrimRight(prefix, "/")
-	}
-	proxy.prefix = prefix
-	if len(method) > 0 {
-		proxy.methods = make(map[string]bool, len(method))
-		for _, m := range method {
-			proxy.methods[m] = true
-		}
-	}
-	srv.Use(proxy.Middleware)
+	srv.Register(wildcardRoute(prefix), proxy.Handle, method...)
 	return proxy
 }
 
-// Static 注册静态文件服务（全局中间件方式）
-// 文件存在直接响应，不存在自动回退到 API 路由匹配
+// Static 注册静态文件服务，通配路由匹配 prefix 下所有路径
 // 如果 root 不是绝对路径，以程序的 WorkDir 为根目录
 func (srv *Server) Static(prefix, root string, method ...string) *Static {
-	static := NewStatic(prefix, root)
-	if len(method) > 0 {
-		static.methods = make(map[string]bool, len(method))
-		for _, m := range method {
-			static.methods[m] = true
-		}
+	static := NewStatic(root)
+	if len(method) == 0 {
+		method = []string{http.MethodGet, http.MethodHead}
 	}
-	srv.Use(static.Middleware)
+	srv.Register(wildcardRoute(prefix), static.Handle, method...)
 	return static
 }
 
@@ -188,10 +173,20 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HTTPErrorHandler(c, "server stopped")
 		return
 	}
-	// node/params 存入 Context，避免闭包捕获产生堆分配
 	c.node, c.params = srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
-	// 全局中间件 + handler 作为一条链执行（handler 在链尾自动触发，无额外 slice/closure 分配）
-	if err := c.doMiddlewareWithHandler(srv.middleware); err != nil {
+	c.dp.funcs = srv.middleware
+	if c.node != nil {
+		if handle, ok := c.node.Handler().(*Handler); ok {
+			c.dp.handler = handle
+			if len(handle.middleware) > 0 {
+				funcs := make([]MiddlewareFunc, len(srv.middleware)+len(handle.middleware))
+				copy(funcs, srv.middleware)
+				copy(funcs[len(srv.middleware):], handle.middleware)
+				c.dp.funcs = funcs
+			}
+		}
+	}
+	if err := c.doDispatch(); err != nil {
 		HTTPErrorHandler(c, err)
 	}
 }
@@ -255,6 +250,13 @@ func (srv *Server) Accept(ln net.Listener) (err error) {
 		scc.Trigger(srv.shutdown)
 	}
 	return
+}
+
+func wildcardRoute(prefix string) string {
+	if strings.HasSuffix(prefix, "*") {
+		return prefix
+	}
+	return strings.TrimRight(prefix, "/") + "/*"
 }
 
 func (srv *Server) shutdown() {
