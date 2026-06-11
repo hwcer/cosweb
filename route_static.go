@@ -41,6 +41,9 @@ func (this *Static) Nocache(v bool) {
 }
 
 func (this *Static) Handle(c *Context) any {
+	if c.IsWebSocket() {
+		return c.Next()
+	}
 	name := c.GetString("*", RequestDataTypeParam)
 	if name == "" {
 		name = this.index
