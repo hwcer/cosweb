@@ -175,16 +175,12 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	c.node, c.params = srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
 	c.dp.funcs = srv.middleware
-	if c.node != nil {
-		if handle, ok := c.node.Handler().(*Handler); ok {
-			c.dp.handler = handle
-			if len(handle.middleware) > 0 {
-				funcs := make([]MiddlewareFunc, len(srv.middleware)+len(handle.middleware))
-				copy(funcs, srv.middleware)
-				copy(funcs[len(srv.middleware):], handle.middleware)
-				c.dp.funcs = funcs
-			}
-		}
+	c.dp.handler = srv.lookupHandler(c.node, c.Request.URL.Path)
+	if c.dp.handler != nil && len(c.dp.handler.middleware) > 0 {
+		funcs := make([]MiddlewareFunc, len(srv.middleware)+len(c.dp.handler.middleware))
+		copy(funcs, srv.middleware)
+		copy(funcs[len(srv.middleware):], c.dp.handler.middleware)
+		c.dp.funcs = funcs
 	}
 	if err := c.doDispatch(); err != nil {
 		HTTPErrorHandler(c, err)
@@ -197,13 +193,11 @@ func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) (err error) 
 	if len(tlsConfig) > 0 {
 		srv.Server.TLSConfig = tlsConfig[0]
 	}
-	//启动服务
 	err = scc.Timeout(time.Second, func() error {
 		if srv.Server.TLSConfig != nil {
 			return srv.Server.ListenAndServeTLS("", "")
-		} else {
-			return srv.Server.ListenAndServe()
 		}
+		return srv.Server.ListenAndServe()
 	})
 	if errors.Is(err, scc.ErrorTimeout) {
 		err = nil
@@ -217,7 +211,6 @@ func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) (err error) 
 // TLS starts an HTTPS server.
 // address  string | net.Listener
 func (srv *Server) TLS(address any, certFile, keyFile string) (err error) {
-	//启动服务
 	err = scc.Timeout(time.Second, func() error {
 		switch v := address.(type) {
 		case string:
@@ -239,7 +232,6 @@ func (srv *Server) TLS(address any, certFile, keyFile string) (err error) {
 }
 
 func (srv *Server) Accept(ln net.Listener) (err error) {
-	//启动服务
 	err = scc.Timeout(time.Second, func() error {
 		return srv.Server.Serve(ln)
 	})
@@ -250,6 +242,21 @@ func (srv *Server) Accept(ln net.Listener) (err error) {
 		scc.Trigger(srv.shutdown)
 	}
 	return
+}
+
+// lookupHandler 从匹配的节点获取 Handler，若节点为空则尝试从路径对应的 Service 获取。
+// 这确保即使路由未精确匹配到节点（如 WebSocket 中间件模式），Service 级 Handler 仍可生效。
+func (srv *Server) lookupHandler(node *registry.Node, path string) *Handler {
+	if node != nil {
+		if h, ok := node.Handler().(*Handler); ok {
+			return h
+		}
+	} else if service, _ := srv.Registry.Get(path); service != nil {
+		if h, ok := service.GetHandler().(*Handler); ok {
+			return h
+		}
+	}
+	return nil
 }
 
 func wildcardRoute(prefix string) string {

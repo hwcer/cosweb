@@ -123,6 +123,5 @@ func (h *Handler) defaultSerialize(c *Context, reply any) ([]byte, error) {
 	if h.serialize != nil {
 		return h.serialize(c, reply)
 	}
-	b := c.Accept()
-	return b.Marshal(reply)
+	return c.Accept().Marshal(reply)
 }

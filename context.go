@@ -116,7 +116,7 @@ func (c *Context) doDispatch() error {
 		c.dp.index++
 		return mf(c, c.dispatchFn)
 	}
-	if c.dp.handler == nil {
+	if c.dp.handler == nil || c.node == nil {
 		return ErrNotFound
 	}
 	reply, err := c.dp.handler.handle(c.node, c)
