@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-cosweb is a lightweight, high-performance Go HTTP framework. It uses `cosgo/registry` for routing (static 16ns / parameterized 55ns lookup), sync.Pool context reuse, and nested Next-style middleware semantics. The project is a Go module at `github.com/hwcer/cosweb`.
+cosweb is a lightweight, high-performance Go HTTP framework. It uses `cosgo/registry` for routing (static 16ns / parameterized 55ns lookup), sync.Pool context reuse, and layered middleware semantics. The project is a Go module at `github.com/hwcer/cosweb`.
 
 Primary language is Go. Comments and documentation are in Chinese.
 
@@ -23,33 +23,30 @@ No Makefile, no linter config, no CI pipeline — standard Go toolchain only.
 
 ### Request lifecycle
 
-`Server.ServeHTTP` → acquire pooled `Context` → `Registry.Search(method, path)` to find route node → assemble middleware chain (global + route-level) → `Context.doDispatch()` walks the chain → handler runs at the tail → release Context back to pool.
+`Server.ServeHTTP` → acquire pooled `Context` → assemble middleware chain (global → path service → node) → `Registry.Search(method, path)` to find route node → `Context.doDispatch()` walks the chain → handler runs at the tail → release Context back to pool.
 
-`Server.ServeHTTP` has three branch paths after route lookup:
-1. **Node matched** (`c.node != nil`): If the node's handler is a `*Handler`, its route-level middleware is appended to the global middleware chain (copied into a new slice to avoid mutating the global slice).
-2. **No node, but Service exists** (`service != nil`): Graceful fallback — the Service's `*Handler` is used with its middleware, even though no specific route matched. This enables Service-level middleware/meta-routes.
-3. **Neither**: Falls through to `doDispatch` with only global middleware, which returns `ErrNotFound`.
+### Middleware dispatch order
 
-Graceful shutdown is coordinated via `scc` (from `cosgo`): `scc.Add(1)`/`scc.Done()` tracks in-flight requests, `scc.Trigger(srv.shutdown)` registers the shutdown callback, and startup methods use `scc.Timeout` to avoid blocking on `ListenAndServe`.
+`ServeHTTP` assembles the middleware chain in three layers:
 
-### Dispatch and middleware chain
+1. **Global middleware** (`srv.middleware`) — always included.
+2. **Path service middleware** — if `Registry.Get(path)` finds a service for the exact request path, its `Handler.middleware` is appended. This enables path-level middleware (e.g. WebSocket upgrade on `/ws`) even when no route method is registered on that path.
+3. **Node handler middleware** — after `Registry.Search` finds a matching route node, if the node's `Handler` differs from the path service handler, its middleware is appended (avoiding duplicates).
 
-The `dispatch` struct (stored inline on `Context` to avoid heap allocation) holds the current state of middleware chain execution:
+The handler is resolved from `c.node.Handler()` at dispatch time, not stored on the dispatch struct. If no node matches (e.g. WebSocket middleware already handled the request), `doDispatch` returns `ErrNotFound` — but middleware that short-circuits (doesn't call `next()`) prevents this from being reached.
+
+### Dispatch internals
+
+The `dispatch` struct (stored inline on `Context` to avoid heap allocation) holds:
 
 - `index` — current position in `funcs`
-- `funcs` — the merged middleware slice (global + route-level)
-- `handler` — the `*Handler` that will invoke the matched route
-- `nexts` — remaining fallback routes (populated lazily by `c.Next()`)
+- `funcs` — the merged middleware slice (global + path service + node)
 
-`Context.doDispatch()` walks `funcs[index:]`, calling each middleware with the cached method value `c.dispatchFn` (avoids allocating a closure per call). When the chain is exhausted, it calls `handler.handle(node, c)` then `handler.write(c, reply)`.
+`Context.doDispatch()` walks `funcs[index:]`, calling each middleware with the cached method value `c.dispatchFn` (avoids allocating a closure per call). When the chain is exhausted, it resolves the handler from `c.node.Handler()` and calls `handler.handle(node, c)` then `handler.write(c, reply)`.
 
 `Context.dispatchFn` is pre-bound at pool creation (`c.dispatchFn = c.doDispatch`) — this is a method value, not a closure, so it allocates once at pool init, not per request.
 
-### Multi-route fallback (`c.Next()`)
-
-When a handler or middleware calls `c.Next()`, it searches for the **next** matching route via `Registry.SearchAll()` (returns all routes matching method+path in priority order). The first match was already consumed; `Next()` shifts to the next one, resets `node`/`params`, merges any new route-level middleware, and re-invokes `doDispatch()`.
-
-This is how Static and Proxy fall through: they are registered as wildcard routes (`/prefix/*`), and if they can't serve the request (file not found, no matching upstream), they call `c.Next()` to try the next route.
+Graceful shutdown is coordinated via `scc` (from `cosgo`): `scc.Add(1)`/`scc.Done()` tracks in-flight requests, `scc.Trigger(srv.shutdown)` registers the shutdown callback, and startup methods use `scc.Timeout` to avoid blocking on `ListenAndServe`.
 
 ### Two-level middleware
 
@@ -72,12 +69,12 @@ Handler functions use the signature `func(*Context) any`. Returning an `error` (
 
 Both `Static` and `Proxy` are **routes** (not global middleware), registered via `srv.Register(wildcardRoute(prefix), handler, methods...)`. The wildcard route pattern is `"prefix/*"`.
 
-- **Static**: Serves the file if it exists on disk; returns `ErrNotFound` (causing the handler to call `c.Next()`) if the file doesn't exist or path traversal is detected. WebSocket requests are skipped. Path traversal is guarded by `withinRoot` using `filepath.Rel`.
+- **Static**: Serves the file if it exists on disk; returns `ErrNotFound` if the file doesn't exist or path traversal is detected. Path traversal is guarded by `withinRoot` using `filepath.Rel`.
 - **Proxy**: Matches a URL prefix and forwards to upstream targets (random load balancing via `defaultProxyGetTarget`). Uses `httputil.ReverseProxy` under the hood. `StripPrefix` controls whether the prefix is removed before forwarding (passed via context to avoid races).
 
 ### Service / Registry integration
 
-`Server.Service(name)` creates a `registry.Service` that can bulk-register struct methods as routes. The `Handler` attached to a Service acts as the pipeline for all routes in that Service. `Server.Handler(name)` retrieves the `*Handler` for an existing Service.
+`Server.Service(name)` creates a `registry.Service` that can bulk-register struct methods as routes. The `Handler` attached to a Service acts as the pipeline for all routes in that Service. `Server.Handler(name)` retrieves the `*Handler` for an existing Service — this is used to attach path-level middleware (e.g. WebSocket) without registering any route methods.
 
 ### Key dependencies
 

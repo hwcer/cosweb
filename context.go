@@ -18,16 +18,12 @@ const (
 )
 
 type dispatch struct {
-	index   int
-	funcs   []MiddlewareFunc
-	handler *Handler
-	nexts   []registry.SearchResult
+	index int
+	funcs []MiddlewareFunc
 }
 
 func (mid *dispatch) Release() {
 	mid.funcs = nil
-	mid.handler = nil
-	mid.nexts = nil
 }
 
 // Context API上下文.
@@ -82,33 +78,6 @@ func (c *Context) release() {
 	c.Session.Release()
 }
 
-func (c *Context) Next() error {
-	if c.dp.nexts == nil {
-		all := c.Server.Registry.SearchAll(c.Request.Method, c.Request.URL.Path)
-		if len(all) > 1 {
-			c.dp.nexts = all[1:]
-		}
-	}
-	if len(c.dp.nexts) == 0 {
-		return ErrNotFound
-	}
-	r := c.dp.nexts[0]
-	c.dp.nexts = c.dp.nexts[1:]
-	c.node = r.Node
-	c.params = r.Params
-	handle, ok := r.Node.Handler().(*Handler)
-	if !ok {
-		return ErrHandlerError
-	}
-	if handle != c.dp.handler && len(handle.middleware) > 0 {
-		funcs := make([]MiddlewareFunc, c.dp.index+len(handle.middleware))
-		copy(funcs, c.dp.funcs[:c.dp.index])
-		copy(funcs[c.dp.index:], handle.middleware)
-		c.dp.funcs = funcs
-	}
-	c.dp.handler = handle
-	return c.doDispatch()
-}
 
 func (c *Context) doDispatch() error {
 	if c.dp.index < len(c.dp.funcs) {
@@ -116,14 +85,18 @@ func (c *Context) doDispatch() error {
 		c.dp.index++
 		return mf(c, c.dispatchFn)
 	}
-	if c.dp.handler == nil || c.node == nil {
+	if c.node == nil {
 		return ErrNotFound
 	}
-	reply, err := c.dp.handler.handle(c.node, c)
+	handler, ok := c.node.Handler().(*Handler)
+	if !ok {
+		return ErrNotFound
+	}
+	reply, err := handler.handle(c.node, c)
 	if err != nil {
 		return err
 	}
-	return c.dp.handler.write(c, reply)
+	return handler.write(c, reply)
 }
 
 // IsWebSocket 判断是否WebSocket

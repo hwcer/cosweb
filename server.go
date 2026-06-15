@@ -118,12 +118,12 @@ func (srv *Server) Service(name ...string) *registry.Service {
 	return service
 }
 
-func (srv *Server) Handler(name ...string) *Handler {
+func (srv *Server) Handler(name ...string) (r *Handler) {
 	var s string
 	if len(name) > 0 {
 		s = name[0]
 	}
-	service := srv.Registry.Service(s)
+	service := srv.Registry.Service(s, &Handler{})
 	return service.GetHandler().(*Handler)
 }
 
@@ -173,15 +173,35 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HTTPErrorHandler(c, "server stopped")
 		return
 	}
-	c.node, c.params = srv.Registry.Search(c.Request.Method, c.Request.URL.Path)
-	c.dp.funcs = srv.middleware
-	c.dp.handler = srv.lookupHandler(c.node, c.Request.URL.Path)
-	if c.dp.handler != nil && len(c.dp.handler.middleware) > 0 {
-		funcs := make([]MiddlewareFunc, len(srv.middleware)+len(c.dp.handler.middleware))
-		copy(funcs, srv.middleware)
-		copy(funcs[len(srv.middleware):], c.dp.handler.middleware)
-		c.dp.funcs = funcs
+	// 1. global middleware
+	funcs := append([]MiddlewareFunc{}, srv.middleware...)
+
+	// 2. path service handler middleware (e.g. /ws WebSocket middleware)
+	path := c.Request.URL.Path
+	var pathHandler *Handler
+	if service, _ := srv.Registry.Get(path); service != nil {
+		if h, ok := service.GetHandler().(*Handler); ok {
+			pathHandler = h
+			funcs = append(funcs, h.middleware...)
+		}
 	}
+
+	// 3. search route node
+	c.node, c.params = srv.Registry.Search(c.Request.Method, path)
+	var nodeHandler *Handler
+	if c.node != nil {
+		if h, ok := c.node.Handler().(*Handler); ok {
+			nodeHandler = h
+		}
+	}
+
+	// 4. if node handler differs from path handler, append node handler middleware
+	if nodeHandler != nil && nodeHandler != pathHandler && len(nodeHandler.middleware) > 0 {
+		funcs = append(funcs, nodeHandler.middleware...)
+	}
+
+	c.dp.funcs = funcs
+
 	if err := c.doDispatch(); err != nil {
 		HTTPErrorHandler(c, err)
 	}
@@ -242,21 +262,6 @@ func (srv *Server) Accept(ln net.Listener) (err error) {
 		scc.Trigger(srv.shutdown)
 	}
 	return
-}
-
-// lookupHandler 从匹配的节点获取 Handler，若节点为空则尝试从路径对应的 Service 获取。
-// 这确保即使路由未精确匹配到节点（如 WebSocket 中间件模式），Service 级 Handler 仍可生效。
-func (srv *Server) lookupHandler(node *registry.Node, path string) *Handler {
-	if node != nil {
-		if h, ok := node.Handler().(*Handler); ok {
-			return h
-		}
-	} else if service, _ := srv.Registry.Get(path); service != nil {
-		if h, ok := service.GetHandler().(*Handler); ok {
-			return h
-		}
-	}
-	return nil
 }
 
 func wildcardRoute(prefix string) string {
