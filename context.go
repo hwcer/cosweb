@@ -78,7 +78,6 @@ func (c *Context) release() {
 	c.Session.Release()
 }
 
-
 func (c *Context) doDispatch() error {
 	if c.dp.index < len(c.dp.funcs) {
 		mf := c.dp.funcs[c.dp.index]
@@ -129,8 +128,8 @@ func (c *Context) Protocol() string {
 // RemoteAddr 客户端地址
 func (c *Context) RemoteAddr() string {
 	if ip := c.Request.Header.Get(HeaderXForwardedFor); ip != "" {
-		if i := strings.IndexByte(ip, ','); i >= 0 {
-			return ip[:i]
+		if before, _, ok := strings.Cut(ip, ","); ok {
+			return before
 		}
 		return ip
 	}
@@ -139,6 +138,15 @@ func (c *Context) RemoteAddr() string {
 	}
 	ra, _, _ := net.SplitHostPort(c.Request.RemoteAddr)
 	return ra
+}
+
+// LocalAddr 请求到达的本地监听地址,多端口场景下用于区分端口。
+// 直接调用 ServeHTTP 的单元测试中该值不存在,返回 nil。
+func (c *Context) LocalAddr() net.Addr {
+	if v, ok := c.Request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok {
+		return v
+	}
+	return nil
 }
 
 func (c *Context) Set(key string, val any) {
@@ -213,6 +221,7 @@ func (c *Context) getOrCreateStore(dataType RequestDataType) (values.Values, boo
 		_ = c.Bind(&newStore)
 	case RequestDataTypeContext:
 		newStore = values.Values{}
+	default:
 	}
 	if newStore != nil {
 		c.stores[dataType] = newStore
@@ -332,8 +341,8 @@ func (c *Context) Accept() binder.Binder {
 	} {
 		for header != "" {
 			var s string
-			if i := strings.IndexByte(header, ','); i >= 0 {
-				s, header = header[:i], header[i+1:]
+			if before, after, ok := strings.Cut(header, ","); ok {
+				s, header = before, after
 			} else {
 				s, header = header, ""
 			}

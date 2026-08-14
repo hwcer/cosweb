@@ -46,7 +46,34 @@ The `dispatch` struct (stored inline on `Context` to avoid heap allocation) hold
 
 `Context.dispatchFn` is pre-bound at pool creation (`c.dispatchFn = c.doDispatch`) — this is a method value, not a closure, so it allocates once at pool init, not per request.
 
-Graceful shutdown is coordinated via `scc` (from `cosgo`): `scc.Add(1)`/`scc.Done()` tracks in-flight requests, `scc.Trigger(srv.shutdown)` registers the shutdown callback, and startup methods use `scc.Timeout` to avoid blocking on `ListenAndServe`.
+Graceful shutdown is coordinated via `scc` (from `cosgo`): `scc.Add(1)`/`scc.Done()` tracks in-flight requests, and `scc.Trigger(srv.shutdown)` registers the shutdown callback (guarded by `srv.trigger sync.Once`, so binding N ports registers it exactly once).
+
+### Listening on multiple ports
+
+One `*http.Server` serves N `net.Listener`s. `http.Server.Serve` supports concurrent calls on multiple listeners and `Shutdown` closes all of them, so every port shares the same Registry, middleware chain, and Context pool for free — `ServeHTTP` is port-agnostic.
+
+Two internal primitives in `server.go`:
+
+- `bind(Endpoint)` — resolves the network through the `Listener(network)` registry in `listener.go` and binds **synchronously**. Bind errors (port in use, permission denied) surface immediately; there is no timeout probe.
+- `serve(ln)` — records the listener, registers the shutdown trigger once, and runs `Server.Serve(ln)` inside `scc.GO` so the goroutine is tracked by the `scc` WaitGroup.
+
+Public API:
+
+- `Listen(address, tlsConfig...)` — one port; **repeatable**, each call adds a listener.
+- `ListenAll(endpoint...)` — atomic batch: binds all endpoints first, and on any failure closes the listeners bound *in that call* before returning the error. The rollback boundary is a single call — ports started by earlier calls keep running.
+- `Accept(ln)` / `TLS(address, certFile, keyFile)` — same signatures as before, now routed through `serve`.
+- `Addresses()` — actual listening addresses; use it to recover the real port when binding `:0`.
+
+`Context.LocalAddr()` reads `http.LocalAddrContextKey` from the request context, which is how a handler or global middleware tells ports apart (e.g. gating an admin port). Returns nil when `ServeHTTP` is called directly in a unit test.
+
+### Per-port TLS and HTTP/2
+
+TLS is applied by the listener (`tls.Listen` inside `tcpMakeListener`), not by `ServeTLS` — `ServeTLS` only reads the single global `Server.TLSConfig`, which cannot express different certificates per port. Each `Endpoint` carries its own `*tls.Config`; if it is nil, `bind` falls back to `srv.Server.TLSConfig` for backward compatibility.
+
+Two constraints follow, and `TestListenTLSHTTP2` guards both:
+
+- **Never assign `srv.Server.TLSConfig` in the listen path.** `Serve` auto-configures HTTP/2 only when `TLSConfig == nil` (`shouldConfigureHTTP2ForServe` in `net/http/server.go`); setting it would silently drop h2 unless its `NextProtos` already contains `"h2"`.
+- **`withALPN` (`listener.go`) fills in ALPN.** `ListenAndServeTLS` used to append `"h2"` automatically; a hand-wrapped TLS listener does not. `withALPN` clones the config and sets `["h2", "http/1.1"]` when `NextProtos` is empty — a non-empty `NextProtos` is treated as a deliberate choice and left alone.
 
 ### Two-level middleware
 
@@ -106,4 +133,4 @@ Both `Static` and `Proxy` are **routes** (not global middleware), registered via
 
 - `TLSConfigAutocert(cacheDir, hosts...)` — creates a `tls.Config` using Let's Encrypt for automatic certificate issuance.
 - `TLSConfigParse(certFile, keyFile)` — constructs `tls.Config` from file paths or raw bytes.
-- `Listener(network)` — retrieves a registered `MakeListener` (tcp, tcp4, tcp6, http, ws, wss pre-registered; extensible via `RegisterListener`).
+- `Listener(network)` — retrieves a registered `MakeListener` (tcp, tcp4, tcp6, http, ws, wss pre-registered; extensible via `RegisterListener`). This is the binding path for every port: `Endpoint.Network` selects the entry, empty means `tcp`.

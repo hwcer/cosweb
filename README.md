@@ -32,6 +32,41 @@ s.POST("/user", func(c *cosweb.Context) any {
 s.Listen(":8080")
 ```
 
+## 多端口监听
+
+一个 `http.Server` 挂 N 个 Listener，所有端口共享同一套路由、中间件和 Context 池。`Listen` 可重复调用；绑定是同步的，端口被占用会立即返回错误，不需要等待探测。
+
+```go
+srv := cosweb.New()
+srv.GET("/hello", h)
+
+// 重复调用累加端口
+srv.Listen(":80")
+srv.Listen(":443", tlsConfig)
+
+// 或原子批量：任一端口绑定失败，本批已绑定的会被关闭并返回错误
+err := srv.ListenAll(
+    cosweb.Endpoint{Address: ":80"},
+    cosweb.Endpoint{Address: ":443", TLS: tlsConfig},
+    cosweb.Endpoint{Network: "tcp4", Address: "127.0.0.1:9090"},
+)
+
+srv.Addresses()   // 实际监听地址，用 :0 随机端口时取真实端口
+```
+
+TLS 按端口独立指定，不同端口可以用不同证书。`Endpoint.Network` 查 `RegisterListener` 注册表，留空即 `tcp`。
+
+handler 里用 `c.LocalAddr()` 区分请求从哪个端口进来：
+
+```go
+srv.Use(func(c *cosweb.Context, next cosweb.Next) error {
+    if a, ok := c.LocalAddr().(*net.TCPAddr); ok && a.Port == 9090 && !isAdmin(c) {
+        return cosweb.ErrNotFound   // 管理端口只放行内部请求
+    }
+    return next()
+})
+```
+
 ## 中间件
 
 ```go
@@ -102,9 +137,22 @@ ac := middleware.NewAutoCert("/var/certs", "example.com")
 // HTTPS
 srv.Listen(":443", ac.TLSConfig())
 
-// HTTP :80 自动重定向 + ACME challenge
+// 方案一：:80 只做重定向 + challenge，不进 cosweb 路由
 go http.ListenAndServe(":80", ac.RedirectHandler())
+
+// 方案二：:80 也由 cosweb 监听，中间件按端口生效
+// 注意 ac.Middleware 会无条件重定向到 https，必须用 LocalAddr 限定在 :80，
+// 否则 :443 的请求也会被重定向，形成死循环
+srv.Listen(":80")
+srv.Use(func(c *cosweb.Context, next cosweb.Next) error {
+    if a, ok := c.LocalAddr().(*net.TCPAddr); ok && a.Port == 80 {
+        return ac.Middleware(c, next)
+    }
+    return next()
+})
 ```
+
+TLS 端口的 HTTP/2 是自动开启的：框架会在绑定时补齐 ALPN（`h2`/`http/1.1`）。如果你显式设置了 `tls.Config.NextProtos`，框架不会覆盖——那被视为明确意图。
 
 ## CORS 跨域
 
@@ -133,6 +181,7 @@ srv.Use(cors.Middleware)
 | AutoCert 中间件 | 重写 Let's Encrypt 自动证书，提供 TLSConfig/Middleware/RedirectHandler |
 | registry.Params 适配 | 路径参数直接 Params.Get() 线性查找 |
 | cosgo v1.8.0 + 全量依赖升级 | registry 16ns 静态命中，schema 19ns 零分配 Parse |
+| 多端口监听 | 一个 http.Server + N Listener，同步绑定去掉 1 秒启动探测，serve 协程纳入 scc 跟踪 |
 
 ## 目录结构
 

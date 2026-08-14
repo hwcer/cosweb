@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -28,6 +29,9 @@ type Server struct {
 	RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
 	MaxBodySize     int64              //最大请求体大小，默认 10MB
 	MaxCacheSize    int64              //最大缓存大小，默认 1MB
+	mutex           sync.Mutex         //保护 listeners
+	listeners       []net.Listener     //已启动的监听器,支持多端口
+	trigger         sync.Once          //保证 shutdown 回调只注册一次
 }
 
 var (
@@ -207,61 +211,106 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Listen starts an HTTP server.
-func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) (err error) {
-	srv.Server.Addr = address
-	if len(tlsConfig) > 0 {
-		srv.Server.TLSConfig = tlsConfig[0]
+// bind 同步绑定一个端点,不启动 Serve。
+// 与 ListenAndServe 不同,net.Listen 的错误(端口占用、权限不足)立即返回,
+// 不需要靠超时探测。
+func (srv *Server) bind(ep Endpoint) (net.Listener, error) {
+	network := ep.Network
+	if network == "" {
+		network = "tcp"
 	}
-	err = scc.Timeout(time.Second, func() error {
-		if srv.Server.TLSConfig != nil {
-			return srv.Server.ListenAndServeTLS("", "")
+	ml := Listener(network)
+	if ml == nil {
+		return nil, fmt.Errorf("unknown network: %s", network)
+	}
+	cfg := ep.TLS
+	if cfg == nil {
+		cfg = srv.Server.TLSConfig //兼容旧用法:直接设置 srv.Server.TLSConfig
+	}
+	return ml(ep.Address, withALPN(cfg))
+}
+
+// serve 登记 listener 并在 scc 跟踪的协程内 Serve。
+// 注意不要给 srv.Server.TLSConfig 赋值:TLSConfig 为 nil 时 Serve 会自动配置 HTTP/2
+// (见 net/http shouldConfigureHTTP2ForServe),赋值反而会让 TLS 端口静默丢失 h2。
+func (srv *Server) serve(ln net.Listener) {
+	srv.mutex.Lock()
+	srv.listeners = append(srv.listeners, ln)
+	if srv.Server.Addr == "" {
+		srv.Server.Addr = ln.Addr().String() //信息性,仅记录首个端口
+	}
+	srv.mutex.Unlock()
+	srv.trigger.Do(func() { scc.Trigger(srv.shutdown) })
+	scc.GO(func() {
+		if err := srv.Server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Alert("cosweb serve %v: %v", ln.Addr(), err)
 		}
-		return srv.Server.ListenAndServe()
 	})
-	if errors.Is(err, scc.ErrorTimeout) {
-		err = nil
+}
+
+// Listen 绑定并启动一个端口,可重复调用以同时监听多个端口,所有端口共享同一套路由。
+func (srv *Server) Listen(address string, tlsConfig ...*tls.Config) error {
+	ep := Endpoint{Address: address}
+	if len(tlsConfig) > 0 {
+		ep.TLS = tlsConfig[0]
 	}
-	if err == nil {
-		scc.Trigger(srv.shutdown)
+	return srv.ListenAll(ep)
+}
+
+// ListenAll 原子批量绑定:先全部 bind,任一失败则关闭本批已绑定的 listener 并返回错误,
+// 全部成功后才开始 Serve。
+// 回滚边界是单次调用,之前 Listen 已启动的端口不受影响;需要跨端口原子性就一次传完。
+func (srv *Server) ListenAll(endpoint ...Endpoint) error {
+	lns := make([]net.Listener, 0, len(endpoint))
+	for _, ep := range endpoint {
+		ln, err := srv.bind(ep)
+		if err != nil {
+			for _, l := range lns {
+				_ = l.Close()
+			}
+			return err
+		}
+		lns = append(lns, ln)
 	}
-	return
+	for _, ln := range lns {
+		srv.serve(ln)
+	}
+	return nil
 }
 
 // TLS starts an HTTPS server.
 // address  string | net.Listener
 func (srv *Server) TLS(address any, certFile, keyFile string) (err error) {
-	err = scc.Timeout(time.Second, func() error {
-		switch v := address.(type) {
-		case string:
-			srv.Server.Addr = v
-			return srv.Server.ListenAndServeTLS(certFile, keyFile)
-		case net.Listener:
-			return srv.Server.ServeTLS(v, certFile, keyFile)
-		default:
-			return errors.New("unknown address type")
-		}
-	})
-	if errors.Is(err, scc.ErrorTimeout) {
-		err = nil
+	var cfg *tls.Config
+	if cfg, err = TLSConfigParse(certFile, keyFile); err != nil {
+		return
 	}
-	if err == nil {
-		scc.Trigger(srv.shutdown)
+	switch v := address.(type) {
+	case string:
+		return srv.ListenAll(Endpoint{Address: v, TLS: cfg})
+	case net.Listener:
+		srv.serve(tls.NewListener(v, withALPN(cfg)))
+		return nil
+	default:
+		return errors.New("unknown address type")
 	}
-	return
 }
 
-func (srv *Server) Accept(ln net.Listener) (err error) {
-	err = scc.Timeout(time.Second, func() error {
-		return srv.Server.Serve(ln)
-	})
-	if errors.Is(err, scc.ErrorTimeout) {
-		err = nil
+// Accept 在一个已有的 listener 上提供服务,可重复调用。
+func (srv *Server) Accept(ln net.Listener) error {
+	srv.serve(ln)
+	return nil
+}
+
+// Addresses 返回全部实际监听地址,使用 :0 随机端口时可用它取真实端口。
+func (srv *Server) Addresses() []net.Addr {
+	srv.mutex.Lock()
+	defer srv.mutex.Unlock()
+	r := make([]net.Addr, 0, len(srv.listeners))
+	for _, ln := range srv.listeners {
+		r = append(r, ln.Addr())
 	}
-	if err == nil {
-		scc.Trigger(srv.shutdown)
-	}
-	return
+	return r
 }
 
 func wildcardRoute(prefix string) string {
