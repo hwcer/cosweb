@@ -7,14 +7,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/hwcer/logger"
 )
 
 // Render provides functions for easily writing HTML templates & JSON out to a HTTP Response.
 type Render struct {
-	Options   *Options
-	templates map[string]*template.Template
+	Options *Options
+	// templates 以原子快照发布:Debug模式每次渲染都会重编译并整体替换,
+	// 并发请求的读取不能与该写入竞争
+	templates atomic.Pointer[map[string]*template.Template]
 }
 
 // Options holds the configuration Options for a Render
@@ -57,10 +60,9 @@ func New(opts *Options) *Render {
 		opts.Charset = "UTF-8"
 	}
 
-	r := &Render{
-		Options:   opts,
-		templates: make(map[string]*template.Template),
-	}
+	r := &Render{Options: opts}
+	empty := make(map[string]*template.Template)
+	r.templates.Store(&empty)
 	// 启动时编译一次,失败通过 logger.Alert 报告,不杀进程
 	if err := r.compileTemplatesFromDir(); err != nil {
 		logger.Alert("render compile templates: %v", err)
@@ -84,7 +86,7 @@ func (r *Render) Render(buf io.Writer, name string, data any) error {
 			return e
 		}
 	}
-	tmpl := r.templates[tplName]
+	tmpl := (*r.templates.Load())[tplName]
 	if tmpl == nil {
 		return fmt.Errorf("unrecognised template %s", tplName)
 	}
@@ -131,7 +133,7 @@ func (r *Render) compileTemplatesFromDir() error {
 		}
 		templates[fileName] = tmpl
 	}
-	r.templates = templates
+	r.templates.Store(&templates)
 	return nil
 }
 

@@ -61,13 +61,13 @@ func TestMiddlewareNestedSemantics(t *testing.T) {
 // TestMiddlewareShortCircuit 验证中间件不调 next() 则短路后续中间件和 handler。
 func TestMiddlewareShortCircuit(t *testing.T) {
 	s := New()
-	var handlerRan int32
+	var handlerRan atomic.Int32
 	s.Use(func(c *Context, next Next) error {
 		// 不调用 next,直接写响应
 		return c.String("halted")
 	})
 	s.GET("/x", func(c *Context) any {
-		atomic.AddInt32(&handlerRan, 1)
+		handlerRan.Add(1)
 		return "never"
 	})
 
@@ -81,7 +81,7 @@ func TestMiddlewareShortCircuit(t *testing.T) {
 	if string(body) != "halted" {
 		t.Errorf("expected body 'halted', got %q", body)
 	}
-	if atomic.LoadInt32(&handlerRan) != 0 {
+	if handlerRan.Load() != 0 {
 		t.Errorf("handler should not have run")
 	}
 }
@@ -196,13 +196,13 @@ func TestStaticRouting(t *testing.T) {
 		want   string
 	}{
 		// "/" 前缀：根目录静态服务
-		{"/", root, "/", "root-index"},             // / → index.html
-		{"/", root, "/style.css", "body{}"},        // /* → 所有文件
-		{"/", root, "/s/app.js", "console.log()"},  // /* → 子目录文件
+		{"/", root, "/", "root-index"},            // / → index.html
+		{"/", root, "/style.css", "body{}"},       // /* → 所有文件
+		{"/", root, "/s/app.js", "console.log()"}, // /* → 子目录文件
 
 		// "/s" 前缀：挂载 root/s 子目录
-		{"/s", subDir, "/s/", "sub-index"},            // /s/ → index.html
-		{"/s", subDir, "/s/app.js", "console.log()"},  // /s/* → 子目录下所有文件
+		{"/s", subDir, "/s/", "sub-index"},           // /s/ → index.html
+		{"/s", subDir, "/s/app.js", "console.log()"}, // /s/* → 子目录下所有文件
 	}
 
 	for _, tt := range tests {

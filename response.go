@@ -21,6 +21,14 @@ type Response struct {
 	hijacked bool
 }
 
+// Flush 实现http.Flusher,转发给底层ResponseWriter
+// ReverseProxy等依赖此接口周期性刷出响应;不实现时SSE/长chunked响应会被缓冲攒包
+func (res *Response) Flush() {
+	if f, ok := res.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	hijacker, ok := res.ResponseWriter.(http.Hijacker)
 	if !ok {
@@ -120,7 +128,10 @@ func (c *Context) File(file string) (err error) {
 		return err
 	}
 	defer f.Close()
-	fi, _ := f.Stat()
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
 	if fi.IsDir() {
 		file = filepath.Join(file, indexPage)
 		f, err = os.Open(file)

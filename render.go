@@ -7,7 +7,7 @@ import (
 
 // Render is the interface that wraps the Render function.
 type Render interface {
-	Render(io.Writer, string, interface{}) error
+	Render(io.Writer, string, any) error
 }
 
 func NewRender(options *render.Options) *render.Render {

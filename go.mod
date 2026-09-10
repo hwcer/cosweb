@@ -1,6 +1,6 @@
 module github.com/hwcer/cosweb
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/hwcer/cosgo v1.8.4-0.20260904100637-05162b06213a
@@ -18,7 +18,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/onsi/gomega v1.41.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.2 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/spf13/afero v1.15.0 // indirect

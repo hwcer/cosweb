@@ -48,7 +48,7 @@ func (this *Proxy) Handle(c *Context) any {
 	if this.StripPrefix {
 		forwardPath = "/" + c.GetString("*", RequestDataTypeParam)
 	}
-	c.Request = c.Request.WithContext(withProxyPath(c.Request.Context(), forwardPath))
+	c.Request = c.Request.WithContext(withProxyPath(c.Request.Context(), forwardPath, target))
 	rp := this.reverse
 	if this.Transport != nil {
 		cp := *rp
@@ -62,12 +62,18 @@ func (this *Proxy) Handle(c *Context) any {
 
 type proxyPathKey struct{}
 
-func withProxyPath(parent context.Context, path string) context.Context {
-	return context.WithValue(parent, proxyPathKey{}, path)
+type proxyTargetKey struct{}
+
+// withProxyPath 同时携带转发路径与选定的target:
+// rewrite回调无法拿到*Context,二次调用GetTarget会因nil context panic,
+// 多target时两次随机选择也可能不一致
+func withProxyPath(parent context.Context, path string, target *url.URL) context.Context {
+	parent = context.WithValue(parent, proxyPathKey{}, path)
+	return context.WithValue(parent, proxyTargetKey{}, target)
 }
 
 func (this *Proxy) rewrite(pr *httputil.ProxyRequest) {
-	target := this.GetTarget(nil, this.target)
+	target, _ := pr.In.Context().Value(proxyTargetKey{}).(*url.URL)
 	if target == nil {
 		return
 	}
