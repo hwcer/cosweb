@@ -29,8 +29,10 @@ type Server struct {
 	RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
 	MaxBodySize     int64              //最大请求体大小，默认 10MB
 	MaxCacheSize    int64              //最大缓存大小，默认 1MB
-	mutex           sync.Mutex         //保护 listeners
+	mutex           sync.Mutex         //保护 listeners/legacyTLS
 	listeners       []net.Listener     //已启动的监听器,支持多端口
+	legacyTLS       *tls.Config        //旧用法 Server.TLSConfig 的快照,见 takeLegacyTLS
+	legacyTaken     bool               //快照是否已取(legacyTLS 本身可为 nil,不能当标志)
 	trigger         sync.Once          //保证 shutdown 回调只注册一次
 }
 
@@ -225,15 +227,37 @@ func (srv *Server) bind(ep Endpoint) (net.Listener, error) {
 	}
 	cfg := ep.TLS
 	if cfg == nil {
-		cfg = srv.Server.TLSConfig //兼容旧用法:直接设置 srv.Server.TLSConfig
+		cfg = srv.takeLegacyTLS() //兼容旧用法:直接设置 srv.Server.TLSConfig
 	}
 	return ml(ep.Address, withALPN(cfg))
+}
+
+// takeLegacyTLS 取走旧用法配置的快照并**清空 stdlib 字段**。
+// 🔴 首次 Serve 的惰性 HTTP/2 装配会在 serve 协程里**写** Server.TLSConfig
+//(net/http h2_bundle http2ConfigureServer:即使为 nil 也赋 new(tls.Config)),
+//任何此后对它的读(bind 回退、业务/测试断言)都是数据竞争。-race 实报过。
+//所以首绑定时(与调用方同协程、先于任何 serve 协程,天然无竞争)把它冻结进
+//legacyTLS、stdlib 字段归零(自动 h2 语义不变),之后库代码不再碰它。
+//旧用法因此限定"New 之后、首次 Listen 之前赋值"——之后赋值不生效(原本就会
+//与 Serve 竞争,从来不是合法用法)。
+func (srv *Server) takeLegacyTLS() *tls.Config {
+	srv.mutex.Lock()
+	defer srv.mutex.Unlock()
+	//🔴 只允许写一次:快照值本身可能是 nil(纯 HTTP),拿值当"已取"标志会
+	//退化成每次调用都重写 stdlib 字段,与已启动 serve 协程的读竞争(-race 实报)
+	if !srv.legacyTaken {
+		srv.legacyTaken = true
+		srv.legacyTLS = srv.Server.TLSConfig
+		srv.Server.TLSConfig = nil
+	}
+	return srv.legacyTLS
 }
 
 // serve 登记 listener 并在 scc 跟踪的协程内 Serve。
 // 注意不要给 srv.Server.TLSConfig 赋值:TLSConfig 为 nil 时 Serve 会自动配置 HTTP/2
 // (见 net/http shouldConfigureHTTP2ForServe),赋值反而会让 TLS 端口静默丢失 h2。
 func (srv *Server) serve(ln net.Listener) {
+	srv.takeLegacyTLS() //serve 协程启动前冻结旧用法字段,防 stdlib 惰性写入的竞争
 	srv.mutex.Lock()
 	srv.listeners = append(srv.listeners, ln)
 	if srv.Server.Addr == "" {

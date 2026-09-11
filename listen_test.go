@@ -223,11 +223,14 @@ func TestListenTLSHTTP2(t *testing.T) {
 	}
 
 	s := newListenServer(t)
-	if err = s.ListenAll(Endpoint{Address: "127.0.0.1:0", TLS: cfg}); err != nil {
-		t.Fatalf("ListenAll: %v", err)
-	}
+	//必须在 ListenAll **之前**断言:首次 Serve 的惰性 HTTP/2 装配会在 serve 协程里
+	//写 Server.TLSConfig(stdlib 行为,即使原值是 nil),启动后再读它就是数据竞争
+	//(-race 实报过);这条不变量约束的是 cosweb 自己不许赋值,启动前断言即可
 	if s.Server.TLSConfig != nil {
 		t.Fatal("srv.Server.TLSConfig 必须保持 nil,否则 Serve 不会自动装配 HTTP/2")
+	}
+	if err = s.ListenAll(Endpoint{Address: "127.0.0.1:0", TLS: cfg}); err != nil {
+		t.Fatalf("ListenAll: %v", err)
 	}
 	// withALPN 不得污染调用方传入的 config
 	if len(cfg.NextProtos) != 0 {
