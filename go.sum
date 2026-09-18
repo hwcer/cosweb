@@ -17,8 +17,8 @@ github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPE
 github.com/go-viper/mapstructure/v2 v2.5.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
-github.com/hwcer/cosgo v1.8.4-0.20260912010310-8e8fd00d86e3 h1:8vPP2Wo1BMjtgO3qkjISzTTNoQ5S0GzAmIrFPnZ/S1M=
-github.com/hwcer/cosgo v1.8.4-0.20260912010310-8e8fd00d86e3/go.mod h1:RtiJ04/yrHSzqSLD+o/pLJYcrQGr+ywSlwhdDTUU1GE=
+github.com/hwcer/cosgo v1.8.4-0.20260916091516-7d4abbb6f7b5 h1:vacRMywBgCtkck8CGmFevpRVNvTWGmC/qW29BX+ycAo=
+github.com/hwcer/cosgo v1.8.4-0.20260916091516-7d4abbb6f7b5/go.mod h1:RtiJ04/yrHSzqSLD+o/pLJYcrQGr+ywSlwhdDTUU1GE=
 github.com/hwcer/logger v0.2.9-0.20260910161556-c8faab738be9 h1:ELJ+1dXuWuxW710mfXjG9lelccEWUigvU4lGZ/R+8UI=
 github.com/hwcer/logger v0.2.9-0.20260910161556-c8faab738be9/go.mod h1:EjeW8zyZPytb4WuWt81dSvlOvdnQ358hD1TwSC3xVW8=
 github.com/klauspost/compress v1.18.6 h1:2jupLlAwFm95+YDR+NwD2MEfFO9d4z4Prjl1XXDjuao=
