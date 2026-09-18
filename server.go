@@ -234,12 +234,12 @@ func (srv *Server) bind(ep Endpoint) (net.Listener, error) {
 
 // takeLegacyTLS 取走旧用法配置的快照并**清空 stdlib 字段**。
 // 🔴 首次 Serve 的惰性 HTTP/2 装配会在 serve 协程里**写** Server.TLSConfig
-//(net/http h2_bundle http2ConfigureServer:即使为 nil 也赋 new(tls.Config)),
-//任何此后对它的读(bind 回退、业务/测试断言)都是数据竞争。-race 实报过。
-//所以首绑定时(与调用方同协程、先于任何 serve 协程,天然无竞争)把它冻结进
-//legacyTLS、stdlib 字段归零(自动 h2 语义不变),之后库代码不再碰它。
-//旧用法因此限定"New 之后、首次 Listen 之前赋值"——之后赋值不生效(原本就会
-//与 Serve 竞争,从来不是合法用法)。
+// (net/http h2_bundle http2ConfigureServer:即使为 nil 也赋 new(tls.Config)),
+// 任何此后对它的读(bind 回退、业务/测试断言)都是数据竞争。-race 实报过。
+// 所以首绑定时(与调用方同协程、先于任何 serve 协程,天然无竞争)把它冻结进
+// legacyTLS、stdlib 字段归零(自动 h2 语义不变),之后库代码不再碰它。
+// 旧用法因此限定"New 之后、首次 Listen 之前赋值"——之后赋值不生效(原本就会
+// 与 Serve 竞争,从来不是合法用法)。
 func (srv *Server) takeLegacyTLS() *tls.Config {
 	srv.mutex.Lock()
 	defer srv.mutex.Unlock()
