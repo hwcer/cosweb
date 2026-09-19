@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hwcer/cosgo/binder"
@@ -19,21 +20,22 @@ import (
 
 // Server is the top-level framework instance.
 type Server struct {
-	pool            sync.Pool
-	middleware      []MiddlewareFunc //全局中间件
-	Binder          binder.Binder    //默认序列化方式
-	Render          Render
-	Server          *http.Server
-	Registry        *registry.Registry
-	AcceptIgnore    map[string]bool    //响应协商时忽略的 MIME 类型（如 */*、form-urlencoded）
-	RequestDataType RequestDataTypeMap //使用GET获取数据时默认的查询方式
-	MaxBodySize     int64              //最大请求体大小，默认 10MB
-	MaxCacheSize    int64              //最大缓存大小，默认 1MB
-	mutex           sync.Mutex         //保护 listeners/legacyTLS
-	listeners       []net.Listener     //已启动的监听器,支持多端口
-	legacyTLS       *tls.Config        //旧用法 Server.TLSConfig 的快照,见 takeLegacyTLS
-	legacyTaken     bool               //快照是否已取(legacyTLS 本身可为 nil,不能当标志)
-	trigger         sync.Once          //保证 shutdown 回调只注册一次
+	pool             sync.Pool
+	middleware       []MiddlewareFunc                 //全局中间件(Use 写)
+	middlewareFrozen atomic.Pointer[[]MiddlewareFunc] //中间件快照(ServeHTTP 热路径零拷贝读;len==cap,追加必然换底层数组)
+	Binder           binder.Binder                    //默认序列化方式
+	Render           Render
+	Server           *http.Server
+	Registry         *registry.Registry
+	AcceptIgnore     map[string]bool    //响应协商时忽略的 MIME 类型（如 */*、form-urlencoded）
+	RequestDataType  RequestDataTypeMap //使用GET获取数据时默认的查询方式
+	MaxBodySize      int64              //最大请求体大小，默认 10MB
+	MaxCacheSize     int64              //最大缓存大小，默认 1MB
+	mutex            sync.Mutex         //保护 listeners/legacyTLS
+	listeners        []net.Listener     //已启动的监听器,支持多端口
+	legacyTLS        *tls.Config        //旧用法 Server.TLSConfig 的快照,见 takeLegacyTLS
+	legacyTaken      bool               //快照是否已取(legacyTLS 本身可为 nil,不能当标志)
+	trigger          sync.Once          //保证 shutdown 回调只注册一次
 }
 
 var (
@@ -69,6 +71,8 @@ func New() (s *Server) {
 	}
 	s.Server.Handler = s
 	s.RequestDataType = defaultRequestDataType
+	empty := make([]MiddlewareFunc, 0)
+	s.middlewareFrozen.Store(&empty)
 	s.pool.New = func() any {
 		return NewContext(s)
 	}
@@ -79,7 +83,12 @@ func (srv *Server) Use(i MiddlewareFunc) {
 	if i == nil {
 		return
 	}
+	srv.mutex.Lock()
+	defer srv.mutex.Unlock()
 	srv.middleware = append(srv.middleware, i)
+	snapshot := make([]MiddlewareFunc, len(srv.middleware)) //len==cap:任何 append 都换底层数组,不污染快照
+	copy(snapshot, srv.middleware)
+	srv.middlewareFrozen.Store(&snapshot)
 }
 
 // GET registers a new GET Register for a path with matching handler in the Router
@@ -181,8 +190,8 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HTTPErrorHandler(c, "server stopped")
 		return
 	}
-	// 1. global middleware
-	funcs := append([]MiddlewareFunc{}, srv.middleware...)
+	// 1. global middleware(快照直读,零拷贝;快照 len==cap,后续 append 自动换底层数组)
+	funcs := *srv.middlewareFrozen.Load()
 
 	// 2. path service handler middleware (e.g. /ws WebSocket middleware)
 	path := c.Request.URL.Path

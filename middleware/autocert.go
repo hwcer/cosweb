@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/tls"
 	"net/http"
+	"sync"
 
 	"github.com/hwcer/cosweb"
 	"golang.org/x/crypto/acme"
@@ -12,7 +13,9 @@ import (
 // AutoCert Let's Encrypt 自动证书管理中间件
 // 自动申请、续期 HTTPS 证书，支持 HTTP-01 challenge 验证
 type AutoCert struct {
-	manager *autocert.Manager
+	manager       *autocert.Manager
+	challengeOnce sync.Once
+	challenge     http.Handler //HTTP-01 challenge handler:构造一次复用,旧实现每请求重建
 }
 
 // NewAutoCert 创建自动证书中间件
@@ -43,16 +46,17 @@ func (ac *AutoCert) TLSConfig() *tls.Config {
 // 非验证请求重定向到 HTTPS
 func (ac *AutoCert) Middleware(c *cosweb.Context, next cosweb.Next) error {
 	// Let's Encrypt HTTP-01 challenge 路径: /.well-known/acme-challenge/
-	if ac.manager.HTTPHandler(nil) != nil {
-		handler := ac.manager.HTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// manager.HTTPHandler 是构造函数恒返回非 nil,旧实现的判断恒真;
+	// handler 每请求重建一次闭包,用 Once 构造一次复用
+	ac.challengeOnce.Do(func() {
+		ac.challenge = ac.manager.HTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// 非 challenge 请求重定向到 HTTPS
 			target := "https://" + r.Host + r.URL.RequestURI()
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 		}))
-		handler.ServeHTTP(c.Response, c.Request)
-		return nil
-	}
-	return next()
+	})
+	ac.challenge.ServeHTTP(c.Response, c.Request)
+	return nil
 }
 
 // RedirectHandler 返回一个 http.Handler，用于 HTTP→HTTPS 重定向 + ACME challenge 响应
