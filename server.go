@@ -166,13 +166,15 @@ func (srv *Server) Release(c *Context) {
 // ServeHTTP implements `http.Handler` interface, which serves HTTP requests.
 func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	scc.Add(1)
+	//Done 必须是独立 defer:Release 内部走 Session.Release→Storage.Update(外部存储),
+	//可能 panic——与 Done 同函数体的话 Done 被跳过,计数器泄漏,优雅停机永久挂死
+	defer scc.Done()
 	c := srv.Acquire(w, r)
 	defer func() {
 		if e := recover(); e != nil {
 			HTTPErrorHandler(c, e)
 		}
 		srv.Release(c)
-		scc.Done()
 	}()
 
 	if scc.Stopped() {
@@ -345,5 +347,14 @@ func wildcardRoute(prefix string) string {
 }
 
 func (srv *Server) shutdown() {
-	_ = srv.Server.Shutdown(context.Background())
+	//Shutdown 只等空闲连接,SSE/长轮询这类"非 hijack 但永不空闲"的连接会让它
+	//永远不返回——必须有超时,到期强断兜底
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Server.Shutdown(ctx); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Alert("server shutdown timeout, force closing remaining connections")
+		}
+		_ = srv.Server.Close()
+	}
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"os"
 
-	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -19,10 +18,10 @@ func TLSConfigAutocert(cacheDir string, hosts ...string) (c *tls.Config, err err
 	if len(hosts) > 0 {
 		m.HostPolicy = autocert.HostWhitelist(hosts...)
 	}
-	c = new(tls.Config)
-	c.GetCertificate = m.GetCertificate
-	c.NextProtos = append(c.NextProtos, acme.ALPNProto)
-	return
+	//🔴 必须用 manager.TLSConfig():旧实现自建 tls.Config 后 NextProtos 只剩
+	//acme/tls/1 一项,withALPN 视为调用方明确意图不再补 h2/http1.1——
+	//现代客户端提供 ALPN 且无交集时握手直接失败,除 ACME challenge 外全部连不上
+	return m.TLSConfig(), nil
 }
 
 func filepathOrContent(fileOrContent any) (content []byte, err error) {

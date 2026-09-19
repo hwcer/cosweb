@@ -11,6 +11,7 @@ import (
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/session"
 	"github.com/hwcer/cosgo/values"
+	"github.com/hwcer/logger"
 )
 
 const (
@@ -33,6 +34,7 @@ type Context struct {
 	stores     map[RequestDataType]values.Values // 统一存储所有参数
 	node       *registry.Node                    // 当前匹配的路由节点（避免闭包分配）
 	params     registry.Params                   // 当前路径参数
+	bindErr    error                             // 请求体解析错误(供 handler 经 BindError 感知,旧实现被静默吞掉)
 	dp         dispatch
 	dispatchFn Next     // 缓存 c.doDispatch 方法值，避免每次传递时分配
 	response   Response // 内嵌值，避免每次请求堆分配
@@ -40,6 +42,12 @@ type Context struct {
 	Session    *session.Session
 	Request    *http.Request
 	Response   *Response
+}
+
+// BindError 返回请求体解析错误;body JSON 损坏时参数被当空表处理,
+// handler 可据此区分"字段缺失"与"请求体损坏"
+func (c *Context) BindError() error {
+	return c.bindErr
 }
 
 // NewContext returns a Context instance.
@@ -70,6 +78,7 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 func (c *Context) release() {
 	c.body = nil
 	c.accept = nil
+	c.bindErr = nil
 	clear(c.stores)
 	c.Request = nil
 	c.response.ResponseWriter = nil
@@ -218,7 +227,12 @@ func (c *Context) getOrCreateStore(dataType RequestDataType) (values.Values, boo
 		}
 	case RequestDataTypeBody:
 		newStore = values.Values{}
-		_ = c.Bind(&newStore)
+		//Bind 错误必须留痕:body JSON 损坏时静默当"空请求",handler 拿到全零值,
+		//无法区分"字段缺失"与"请求体损坏"——线上排查极其困难
+		if err := c.Bind(&newStore); err != nil {
+			logger.Debug("request body bind failed: %v", err)
+			c.bindErr = err
+		}
 	case RequestDataTypeContext:
 		newStore = values.Values{}
 	default:
