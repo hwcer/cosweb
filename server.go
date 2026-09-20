@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hwcer/cosgo/phase"
+
 	"github.com/hwcer/cosgo/binder"
 	"github.com/hwcer/cosgo/registry"
 	"github.com/hwcer/cosgo/scc"
@@ -83,6 +85,10 @@ func (srv *Server) Use(i MiddlewareFunc) {
 	if i == nil {
 		return
 	}
+	if phase.Sealed() {
+		phase.Alert("cosweb.Server.Use")
+		return
+	}
 	srv.mutex.Lock()
 	defer srv.mutex.Unlock()
 	srv.middleware = append(srv.middleware, i)
@@ -94,17 +100,29 @@ func (srv *Server) Use(i MiddlewareFunc) {
 // GET registers a new GET Register for a path with matching handler in the Router
 // with optional Register-level middleware.
 func (srv *Server) GET(path string, h func(*Context) any) {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Server.GET")
+		return
+	}
 	srv.Register(path, h, http.MethodGet)
 }
 
 // POST registers a new POST Register for a path with matching handler in the
 // Router with optional Register-level middleware.
 func (srv *Server) POST(path string, h func(*Context) any) {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Server.POST")
+		return
+	}
 	srv.Register(path, h, http.MethodPost)
 }
 
 // Proxy 注册反向代理，通配路由匹配 prefix 下所有路径
 func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Server.Proxy")
+		return nil
+	}
 	proxy := NewProxy(address)
 	srv.Register(wildcardRoute(prefix), proxy.Handle, method...)
 	return proxy
@@ -113,6 +131,10 @@ func (srv *Server) Proxy(prefix, address string, method ...string) *Proxy {
 // Static 注册静态文件服务，通配路由匹配 prefix 下所有路径
 // 如果 root 不是绝对路径，以程序的 WorkDir 为根目录
 func (srv *Server) Static(prefix, root string, method ...string) *Static {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Server.Static")
+		return nil
+	}
 	static := NewStatic(root)
 	if len(method) == 0 {
 		method = []string{http.MethodGet, http.MethodHead}
@@ -123,6 +145,10 @@ func (srv *Server) Static(prefix, root string, method ...string) *Static {
 
 // Service 使用Registry的Service批量注册struct
 func (srv *Server) Service(name ...string) *registry.Service {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Server.Service")
+		return nil
+	}
 	handler := &Handler{}
 	var s string
 	if len(name) > 0 {
@@ -145,6 +171,10 @@ func (srv *Server) Handler(name ...string) (r *Handler) {
 // Register AddTarget registers a new Register for an HTTP value and path with matching handler
 // in the Router with optional Register-level middleware.
 func (srv *Server) Register(route string, handler func(*Context) any, method ...string) {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Server.Register")
+		return
+	}
 	service := srv.Service()
 	var err error
 	if len(method) == 0 {
@@ -191,7 +221,11 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 1. global middleware(快照直读,零拷贝;快照 len==cap,后续 append 自动换底层数组)
-	funcs := *srv.middlewareFrozen.Load()
+	//零值 Server(&Server{} 未走 New)兜底:旧实现裸 append 对零值安全,这里保持等价
+	funcs := []MiddlewareFunc{}
+	if frozen := srv.middlewareFrozen.Load(); frozen != nil {
+		funcs = *frozen
+	}
 
 	// 2. path service handler middleware (e.g. /ws WebSocket middleware)
 	path := c.Request.URL.Path

@@ -1,6 +1,8 @@
 package cosweb
 
 import (
+	"github.com/hwcer/cosgo/phase"
+
 	"reflect"
 
 	"github.com/hwcer/cosgo/registry"
@@ -28,20 +30,39 @@ type Handler struct {
 	middleware []MiddlewareFunc
 }
 
-// Use middleware
+// Use middleware。🔴 仅启动期调用:路由级 middleware 是裸切片,守卫读 cosgo/phase
+//(公共启动阶段时钟),封板后调用只 Alert 提示并忽略——运行期 append 与请求路径
+//的读是真实数据竞争
 func (h *Handler) Use(middleware ...MiddlewareFunc) {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Handler.Use")
+		return
+	}
 	h.middleware = append(h.middleware, middleware...)
 }
 
+// SetCaller/SetFilter/SetSerialize 同 Use:仅启动期的 Handler 配置入口
 func (h *Handler) SetCaller(caller HandlerCaller) {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Handler.SetCaller")
+		return
+	}
 	h.caller = caller
 }
 
 func (h *Handler) SetFilter(filter HandlerFilter) {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Handler.SetFilter")
+		return
+	}
 	h.filter = filter
 }
 
 func (h *Handler) SetSerialize(serialize HandlerSerialize) {
+	if phase.Sealed() {
+		phase.Alert("cosweb.Handler.SetSerialize")
+		return
+	}
 	h.serialize = serialize
 }
 

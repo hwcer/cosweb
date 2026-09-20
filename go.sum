@@ -21,6 +21,8 @@ github.com/hwcer/cosgo v1.8.4-0.20260919110810-2edf985e2b30 h1:v7UFadCbOf7NRrHkh
 github.com/hwcer/cosgo v1.8.4-0.20260919110810-2edf985e2b30/go.mod h1:RtiJ04/yrHSzqSLD+o/pLJYcrQGr+ywSlwhdDTUU1GE=
 github.com/hwcer/cosgo v1.8.4-0.20260919143343-8f808be6d2f5 h1:sJNbbTWrDvE6dn23Nb1JbLKy7aehAlXfVwY8Cqcxps0=
 github.com/hwcer/cosgo v1.8.4-0.20260919143343-8f808be6d2f5/go.mod h1:RtiJ04/yrHSzqSLD+o/pLJYcrQGr+ywSlwhdDTUU1GE=
+github.com/hwcer/cosgo v1.8.4-0.20260920020613-b5cd5977aa72 h1:wje9WR+KjI8sRXJ/0mfV6GPxfy+TK4AnRpL+A9mO+C4=
+github.com/hwcer/cosgo v1.8.4-0.20260920020613-b5cd5977aa72/go.mod h1:RtiJ04/yrHSzqSLD+o/pLJYcrQGr+ywSlwhdDTUU1GE=
 github.com/hwcer/logger v0.2.9-0.20260910161556-c8faab738be9 h1:ELJ+1dXuWuxW710mfXjG9lelccEWUigvU4lGZ/R+8UI=
 github.com/hwcer/logger v0.2.9-0.20260910161556-c8faab738be9/go.mod h1:EjeW8zyZPytb4WuWt81dSvlOvdnQ358hD1TwSC3xVW8=
 github.com/hwcer/logger v0.2.9-0.20260919134140-418ce5b2863d h1:Vg3KUFKet/RLVqmTGLeKSlu3aJxyqncU7MSCh7fDktI=
